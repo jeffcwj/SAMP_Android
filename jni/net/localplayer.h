@@ -88,7 +88,8 @@ public:
 	void SetSpawnInfo(PLAYER_SPAWN_INFO *pSpawn);
 
 	bool Spawn();
-
+	//发送死亡
+void SendWastedNotification();
 	CPlayerPed * GetPlayerPed() { return m_pPlayerPed; };
 
 	void SendEnterVehicleNotification(VEHICLEID VehicleID, bool bPassenger);
@@ -108,7 +109,7 @@ public:
 	ONFOOT_SYNC_DATA 	m_ofSync;
 	INCAR_SYNC_DATA 	m_icSync;
 
-private:
+public:
 	PLAYER_SPAWN_INFO 	m_SpawnInfo;
 	bool				m_bHasSpawnInfo;
 	uint32_t			m_dwLastSendTick;

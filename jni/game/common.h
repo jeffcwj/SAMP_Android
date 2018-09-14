@@ -89,6 +89,7 @@ typedef struct _PED_TYPE
 	float fRotation2;			// 1372-1376	;Rotation2
 	PADDING(_pad105, 44);		// 1376-1420
 	uint32_t pVehicle;			// 1420-1424	;pVehicle
+	uint32_t pContactEntity; // 1412 - 1416
 } PED_TYPE;
 
 //-----------------------------------------------------------
@@ -102,6 +103,8 @@ typedef struct _VEHICLE_TYPE
 	PED_TYPE *pPassengers[7];	// 1124-1152	;pPassenger
 	PADDING(_pad202, 72);
 	float fHealth;				// 1224-1228	;fHealth
+	uint8_t byteColor1;
+	uint8_t byteColor2;
 } VEHICLE_TYPE;
 
 //-----------------------------------------------------------

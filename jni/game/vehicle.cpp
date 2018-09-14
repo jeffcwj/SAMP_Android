@@ -29,9 +29,10 @@ CVehicle::CVehicle(int iType, float fPosX, float fPosY, float fPosZ,
 
 		ScriptCommand(&create_car,iType,fPosX,fPosY,fPosZ+0.1f,&dwRetID);
 		ScriptCommand(&set_car_z_angle,dwRetID,fRotation);
-		//ScriptCommand(&car_gas_tank_explosion,dwRetID,0);
-		//ScriptCommand(&set_car_hydraulics,dwRetID,0);
-		//ScriptCommand(&toggle_car_tires_vulnerable,dwRetID,0);
+/*		ScriptCommand(&car_gas_tank_explosion,dwRetID,0);
+		ScriptCommand(&set_car_hydraulics,dwRetID,0);
+		ScriptCommand(&toggle_car_tires_vulnerable,dwRetID,0);
+		*/
 
 		m_pVehicle = GamePool_Vehicle_GetAt(dwRetID);
 		m_pEntity = (ENTITY_TYPE *)m_pVehicle; 
@@ -124,7 +125,15 @@ void CVehicle::SetInvulnerable(bool bInv)
 		m_bIsInvulnerable = false;
 	}
 }
-
+//设置颜色
+void CVehicle::SetColor(int iColor1, int iColor2)
+{
+	if(m_pVehicle)  {
+		//ScriptCommand(&set_car_color,m_dwGTAId,iColor1,iColor2);// This was crashing sometimes. 0x47eab8
+		m_pVehicle->byteColor1 = (uint8_t)iColor1;
+		m_pVehicle->byteColor2 = (uint8_t)iColor2;
+	}
+}
 float CVehicle::GetHealth()
 {	
 	if(m_pVehicle) return m_pVehicle->fHealth;

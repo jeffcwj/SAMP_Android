@@ -5,10 +5,9 @@
 #include <unistd.h>
 #include <algorithm>
 #include <list>
+#include <string>
 #include <sys/mman.h>
 #include <android/log.h>
-//iconv
-#include <iconv.h>
 #define MAX_PLAYER_NAME			24
 #define CSCANNER_DISTANCE		200.0f
 

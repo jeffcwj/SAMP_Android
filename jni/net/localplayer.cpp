@@ -1,6 +1,9 @@
 #include "main.h"
 #include "game/util.h"
 #include "game/keystuff.h"
+#include "imgui.h"
+#include "RenderWare/RenderWare.h"
+#include "gui/renderware_imgui.h"
 
 extern CGame *pGame;
 extern CNetGame *pNetGame;
@@ -260,7 +263,17 @@ void CLocalPlayer::SendInCarFullSyncData()
 		pNetGame->GetRakClient()->Send(&bsVehicleSync, HIGH_PRIORITY, UNRELIABLE_SEQUENCED, 0);
 	}
 }
-
+//发送死亡到服务器
+//------------------------------------------------------------------------
+void CLocalPlayer::SendWastedNotification()
+{
+	RakNet::BitStream bsPlayerDeath;
+	uint8_t byteDeathReason;
+byteDeathReason =55;
+	bsPlayerDeath.Write(byteDeathReason);
+	pNetGame->GetRakClient()->RPC(&RPC_Death, &bsPlayerDeath, HIGH_PRIORITY, RELIABLE_ORDERED, 0, false, UNASSIGNED_NETWORK_ID, NULL);
+}
+///---------------------------------------------------------------------------------
 	void CLocalPlayer::SendPassengerFullSyncData()
 {
 	RakNet::BitStream bsPassengerSync;
@@ -368,6 +381,9 @@ bool CLocalPlayer::Spawn()
 //进入车的时候触发
 void CLocalPlayer::SendEnterVehicleNotification(VEHICLEID VehicleID, bool bPassenger)
 {
+/*char * n=ImGuiPlus::utf8_to_gbk("你好，这是手机端发送的消息，它已经做出来了!");
+pGame->SendChat(n);
+*/
 	RakNet::BitStream bsSend;
 	uint8_t bytePassenger = 0;
 
@@ -395,7 +411,6 @@ void CLocalPlayer::SendEnterVehicleNotification(VEHICLEID VehicleID, bool bPasse
 // допилить
 void CLocalPlayer::SendExitVehicleNotification(VEHICLEID VehicleID)
 {
-
 	RakNet::BitStream bsSend;
 
 	CVehiclePool *pVehiclePool = pNetGame->GetVehiclePool();

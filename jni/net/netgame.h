@@ -33,7 +33,7 @@ public:
 	RakClientInterface 	*GetRakClient() 	{ return m_pRakClient; 		};
 
 	void Process();
-
+	
 	void ResetVehiclePool();
 	void ShutdownForGameModeRestart();
 

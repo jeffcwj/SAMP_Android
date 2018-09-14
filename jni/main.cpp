@@ -1,8 +1,13 @@
 #include "main.h"
-#include "RenderWare/RenderWare.h"
 #include "jni.h"
 #include <pthread.h>
 #include <dlfcn.h>
+#include "game/util.h"
+#include "game/keystuff.h"
+#include "imgui.h"
+#include "RenderWare/RenderWare.h"
+#include "gui/renderware_imgui.h"
+
 CGame		*pGame = 0;
 CNetGame	*pNetGame = 0;
 CChatWindow *pChatWindow = 0;
@@ -84,7 +89,8 @@ void DoInitStuff()
     fp=NULL;
     //赋值
 	 pName="{66ccff}游戏名:"+buf;
-		pNetGame = new CNetGame((char*)ip.data(),atoi(port.c_str()),(char*)buf.data(), "",(char*)pName.data());
+	 char * n=ImGuiPlus::utf8_to_gbk((char*)buf.data());
+		pNetGame = new CNetGame((char*)ip.data(),atoi(port.c_str()),n, "",(char*)pName.data());
 		bNetworkInited = true;
 	}
 }

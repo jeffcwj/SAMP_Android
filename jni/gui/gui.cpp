@@ -1,7 +1,13 @@
 #include "main.h"
+#include "game/util.h"
+#include "game/keystuff.h"
+#include "imgui.h"
+#include "RenderWare/RenderWare.h"
+#include "gui/renderware_imgui.h"
 
 extern CNetGame *pNetGame;
 extern CGame *pGame;
+extern CChatWindow *pChatWindow;
 
 void DrawPlayerTags()
 {
@@ -46,8 +52,10 @@ void DrawPlayerTags()
 						RGBA_ABGR(uColor);
 						CFont::SetColor((uint8_t*)&uColor);
 						CFont::SetScale(1.0f);
-						CFont::AsciiToGxtChar(pPlayerPool->GetPlayerName(x), buf);
-
+						char * str=(char*)malloc(1024);
+						//转码
+		 		ImGuiPlus::mo_ren(str,(char*)pPlayerPool->GetPlayerName(x));
+						CFont::AsciiToGxtChar(str, buf);
 						float len = CFont::GetStringWidth(buf, 0, 0);
 						CFont::PrintString((out.X - (len/2)) , out.Y, buf);
 

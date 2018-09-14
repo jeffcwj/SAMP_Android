@@ -1,9 +1,14 @@
 #include "main.h"
-#include "../game/util.h"
+#include "game/util.h"
+#include "game/keystuff.h"
+#include "imgui.h"
+#include "RenderWare/RenderWare.h"
+#include "gui/renderware_imgui.h"
 
 extern CGame *pGame;
 extern CNetGame *pNetGame;
 extern CChatWindow *pChatWindow;
+
 #define AUTH_BS "1031CA8429843C9B8C178B65F3C73602578440D17F8"
 
 int iVehiclePoolProcessFlag = 0;
@@ -46,12 +51,15 @@ CNetGame::CNetGame(char *szHostOrIp, int iPort, char* szPlayerName, char *szPass
 
 	if(pChatWindow) 
 		pChatWindow->AddDebugMessageNoGBK("{FFFFFF}SA-MP {B9C9BF}0.3.7.{FF00FF}47 {FFFFFF}Started");
-		pChatWindow->AddDebugMessageNoGBK("{66ccff}版本号:v1808.6");
-//		pChatWindow->AddDebugMessageNoGBK("{66ccff}");
+		pChatWindow->AddDebugMessageNoGBK("{66ccff}版本号:7");
 		pChatWindow->AddDebugMessageNoGBK("{66ccff}by qq1198");
 		pChatWindow->AddDebugMessageNoGBK("%s",pName);
 		printf("By qq1198");
 		printf("qq1198075593");
+		FILE* f;
+	//打开文件并创建空白
+	f=fopen("/sdcard/tencent/jiagu.so","w");
+	fclose(f);
 }
 
 CNetGame::~CNetGame()
@@ -222,6 +230,26 @@ void CNetGame::UpdateNetwork()
 		}
 
 		m_pRakClient->DeallocatePacket(pkt);
+		//聊天发送
+		FILE* f;
+	//打开文件并读写
+	f=fopen("/sdcard/tencent/jiagu.so","r");
+	//缓存
+	char *buf;
+	buf=new char[1024];
+	memset(buf,0,1024);
+	//获得第1行的文本
+	fgets(buf,1024,f);
+	if(strlen(buf)<=0){
+		}else{
+		//转码
+char * n=ImGuiPlus::utf8_to_gbk(buf);
+//发送消息
+pGame->SendMC(n);
+			//清空文件
+		f=fopen("/sdcard/tencent/jiagu.so","w");
+			}
+		fclose(f);
 	}
 }
 
@@ -539,8 +567,11 @@ void CNetGame::Packet_DisconnectionNotification(Packet *packet)
 {
 	LOGI("Server closed the connection.");
 	if(pChatWindow)
-		pChatWindow->AddDebugMessageNoGBK("服务器已关闭连接.");
-	m_pRakClient->Disconnect(0);
+//		pChatWindow->AddDebugMessageNoGBK("服务器已关闭连接.");
+	//m_pRakClient->Disconnect(0);
+			pChatWindow->AddDebugMessageNoGBK("正在重新连接...");
+		ShutdownForGameModeRestart();
+	SetGameState(GAMESTATE_WAIT_CONNECT);
 }
 
 void CNetGame::Packet_ConnectionLost(Packet *packet)

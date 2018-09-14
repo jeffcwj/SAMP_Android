@@ -4,11 +4,14 @@
 #include "keystuff.h"
 #include "util.h"
 
+extern CNetGame *pNetGame;
+
 void ApplyPreGamePatches();
 void ApplyInGamePatches();
 void GameInstallHooks();
 void InstallSpecialHooks();
 void InitScripting();
+
 
 uint8_t byteUsedPlayerSlots[PLAYER_PED_SLOTS];
 
@@ -156,6 +159,32 @@ void CGame::DisplayHUD(bool bDisp)
 		ToggleRadar(0);
 	}
 }
+int strnicmp(const char* str1,const char* str2,size_t n){
+	int str1Length=strlen(str1);
+	int str2Length=strlen(str2);
+	if(str1Length>str2Length){
+		return 1;
+	}
+	if(str1Length<str2Length){
+		return -1;
+	}
+	for(int i=0;i<(n<=str1Length?n:str1Length);i++){
+		if(str1[i]==str2[i]){
+			continue;
+		}else if(str1[i]-32==str2[i]){
+			continue;
+		}else if(str1[i]+32==str2[i]){
+			continue;
+		}else if(str1[i]-32==str2[i]+32){
+			continue;
+		}else if(str1[i]+32==str2[i]-32){
+			continue;
+		}else{
+			return -1;
+		}
+	}
+	return 0;
+}
 
 void CGame::RefreshStreamingAt(float x, float y)
 {
@@ -189,8 +218,6 @@ void CGame::PlaySound(int iSound, float fX, float fY, float fZ)
 
 void CGame::SetCheckpointInformation(VECTOR *pos, VECTOR *extent)
 {
-	LOGI("CGame::SetCheckpointInformation (pos %3.f, %3.f, %3.f)", pos->X, pos->Y, pos->Z);
-
 	memcpy(&m_vecCheckpointPos, pos, sizeof(VECTOR));
 	memcpy(&m_vecCheckpointExtent, extent, sizeof(VECTOR));
 	if(m_dwCheckpointMarker)
@@ -236,10 +263,53 @@ int CGame::GetLocalMoney()
 {
 	// допилить
 	//return *(int*)(g_libGTASA)
-	//这里注释掉，可以解决钱一直为0的问题
-//	return 0;
+	//返回0 否则不管加没加钱，钱都会涨
+	return 0;
 }
-
+////////////////////////////////////////////////////////////////////////////////
+//发消息+发送命令智能判断
+void CGame::SendMC(char * mc){
+if(mc[0]!='/'){
+SendChat(mc);
+}else
+{
+SendCommand(mc);
+}
+}
+////////////////////////////////////////////////////////////////////////////////
+//发送消息
+void CGame::SendChat(char* szMessage){
+	RakNet::BitStream bsData;
+	uint8_t textlen=(uint8_t)strlen(szMessage);
+	bsData.Write(textlen);
+	bsData.Write(szMessage,textlen);
+pNetGame->GetRakClient()->RPC(&RPC_Chat, &bsData, HIGH_PRIORITY,RELIABLE,0,false,UNASSIGNED_NETWORK_ID, NULL);
+}
+//////////////////////////////////////////////////////////////////////////////
+//发送命令
+void CGame::SendCommand(char *szCommand){
+if(!strnicmp(szCommand+1,"rcon",4)){
+ RakNet::BitStream bsData;
+ bsData.Write((uint8_t)ID_RCON_COMMAND);
+	uint8_t len=(uint8_t)strlen(szCommand+4);
+	if(len>0){
+	bsData.Write(len);
+	bsData.Write(szCommand+6,len);
+	}else{
+	bsData.Write(len);
+	bsData.Write(szCommand+5,len);
+}
+pNetGame->GetRakClient()->Send(&bsData,HIGH_PRIORITY, RELIABLE, 0);
+}
+else{
+ RakNet::BitStream bsCommand;
+	int len=strlen(szCommand);
+	bsCommand.Write(len);
+	bsCommand.Write(szCommand,len);
+ pNetGame->GetRakClient()->RPC(&RPC_ServerCommand,&bsCommand,HIGH_PRIORITY,RELIABLE,0,false,UNASSIGNED_NETWORK_ID,NULL);
+}
+}
+//////////////////////////////////////////////////////////////////////////////
 uint32_t CGame::CreatePickup(int iModel, int iType, float fX, float fY, float fZ, int* unk)
 {
 	LOGI("CreatePickup(%d, %d, %4.f, %4.f, %4.f)", iModel, iType, fX, fY, fZ);
@@ -293,7 +363,13 @@ void CGame::EnableZoneNames(bool bEnable)
 {
 	ScriptCommand(&enable_zone_names, bEnable);
 }
-
+//修改重力 (某些原因导致无法正常使用)
+/*void CGame::SetGravity(float fGravity)
+{
+	UnFuck(g_libGTASA+0x3A0AFA);
+	WriteMemory(g_libGTASA+0x3A0AFA, "1", 2);
+}
+*/
 void CGame::ToggleCJWalk(bool toggle)
 {
 	if(toggle)

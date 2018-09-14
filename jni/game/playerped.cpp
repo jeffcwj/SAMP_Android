@@ -432,6 +432,12 @@ VEHICLE_TYPE* CPlayerPed::GetGtaVehicle()
 	return (VEHICLE_TYPE*)m_pPed->pVehicle;
 }
 
+ENTITY_TYPE* CPlayerPed::GetGtaContactEntity()
+{
+	if (!m_pPed->pContactEntity) return NULL;
+	return (ENTITY_TYPE*)m_pPed->pContactEntity;
+}
+
 void CPlayerPed::SetVisible(bool bVisible)
 {
 	m_bVisible = bVisible;

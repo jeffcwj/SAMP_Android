@@ -32,7 +32,62 @@ CObject::~CObject()
 
 void CObject::Process(float fElapsedTime)
 {
-	// допилить
+	if (m_byteMoving & 1)
+	{
+		// Calculate new position based on elapsed time (interpolate)
+		// distance = speed * time
+		// time = fElapsedTime
+		// speed = m_fMoveSpeed
+		MATRIX4X4 matPos;
+		GetMatrix(&matPos);
+
+		m_matCurrent = matPos;
+
+		float distance = fElapsedTime * m_fMoveSpeed;
+		float remaining = DistanceRemaining(&matPos);
+		if (distance >= remaining)
+		{
+			m_byteMoving &= ~1; // Stop it moving
+			// Force the final location so we don't overshoot slightly
+			TeleportTo(m_matTarget.pos.X, m_matTarget.pos.Y, m_matTarget.pos.Z);
+		}
+		else
+		{
+
+			// Else interpolate the new position between the current and final positions
+			remaining /= distance; // Calculate ratio
+
+			m_vPlayerSurfOffs.X = (m_matTarget.pos.X - matPos.pos.X) / remaining;
+			m_vPlayerSurfOffs.Y = (m_matTarget.pos.Y - matPos.pos.Y) / remaining;
+			m_vPlayerSurfOffs.Z = (m_matTarget.pos.Z - matPos.pos.Z) / remaining;
+
+			matPos.pos.X += m_vPlayerSurfOffs.X;
+			matPos.pos.Y += m_vPlayerSurfOffs.Y;
+			matPos.pos.Z += m_vPlayerSurfOffs.Z;
+
+			TeleportTo(matPos.pos.X, matPos.pos.Y, matPos.pos.Z);
+
+			// basic object surfing - local player
+			CPlayerPed *pPed = pGame->FindPlayerPed();
+			if (pPed) {
+				if (pPed->GetGtaContactEntity() == m_pEntity) {
+					PED_TYPE *pPedType = pPed->m_pPed;
+					if ( (pPedType) && (pPed->IsOnGround()) ) {
+						m_bIsPlayerSurfing=true;
+						MATRIX4X4 *matPlayer = pPed->m_pPed->entity.mat;
+						matPlayer->pos.X += m_vPlayerSurfOffs.X;
+						matPlayer->pos.Y += m_vPlayerSurfOffs.Y;
+						matPlayer->pos.Z += m_vPlayerSurfOffs.Z;
+						pPed->SetMatrix(*matPlayer);
+					} else { // player fell off object or jumped
+						m_bIsPlayerSurfing=false;
+					}
+				} else { // contact entity does not match this object
+					m_bIsPlayerSurfing=false;
+				}
+			}
+			}
+			}
 }
 
 float CObject::DistanceRemaining(MATRIX4X4 *matPos)

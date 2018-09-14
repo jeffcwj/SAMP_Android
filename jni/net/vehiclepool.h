@@ -46,7 +46,7 @@ public:
 	int FindGtaIDFromID(int iID);
 
 	void Process();
-
+	void NotifyVehicleDeath(VEHICLEID VehicleID);
 	int FindNearestToLocalPlayerPed();
 
 private:

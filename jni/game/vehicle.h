@@ -9,17 +9,19 @@ public:
 
 	float GetHealth();
 	void SetHealth(float fHealth);
-
+	void  SetColor(int iColor1, int iColor2);
 	bool IsDriverLocalPlayer();
 
 	void SetInvulnerable(bool bInv);
 	void ProcessMarkers();
 
 	bool IsOccupied();
-
+	void    Recreate();
 	void RemoveEveryoneFromVehicle();
 
 	VEHICLE_TYPE	*m_pVehicle;
 	bool			m_bIsInvulnerable;
 	int 			m_dwMarkerID;
+	
+	bool		m_bDoorsLocked; // Vehicle is enterable TRUE/FALSE
 };

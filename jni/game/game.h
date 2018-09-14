@@ -31,13 +31,17 @@ public:
 	float FindGroundZForCoord(float x, float y, float z);
 	void InitGame();
 	void StartGame();
-
+	
+//发送消息
+void SendChat(char* szMessage);
+//发送命令
+void SendCommand(char *szCommand);
+//智能判断
+void SendMC(char*mc);
 	void RequestModel(int iModelID, int iLoadingStream = 2);
 	void LoadRequestedModels();
 	uint8_t IsModelLoaded(int iModelID);
 	void RemoveModel(int iModelID);
-
-
 	void SetWorldTime(int iHour, int iMinute);
 	void ToggleThePassingOfTime(bool bOnOff);
 	void SetWorldWeather(int iWeatherID);
@@ -55,6 +59,8 @@ public:
 	void ToggleCheckpoint(bool bEnabled) { m_bCheckpointsEnabled = bEnabled; };
 	void SetCheckpointInformation(VECTOR *pos, VECTOR *extent);
 
+//重力修改
+//void SetGravity(float fGravity);
 	void MakeRaceCheckpoint();
 	void DisableRaceCheckpoint();
 	void ToggleRaceCheckpoints(bool bEnabled) { m_bRaceCheckpointsEnabled = bEnabled; };

@@ -6,7 +6,7 @@ extern CChatWindow *pChatWindow;
 CPlayerPool::CPlayerPool()
 {
 	m_pLocalPlayer = new CLocalPlayer();
-//玩家池 这个文件中包含了，除自己以外其他玩家的操作
+//玩家池 这个文件中包含了，玩家的操作
 	// допилить
 	for(PLAYERID playerId = 0; playerId < MAX_PLAYERS; playerId++)
 	{

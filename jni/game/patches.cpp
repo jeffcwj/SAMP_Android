@@ -22,10 +22,17 @@ void ApplyInGamePatches()
 	// Remove the FindPlayerInfoForThisPlayerPed
 	UnFuck(g_libGTASA+0x434D94);
 	NOP(g_libGTASA+0x434D94, 6);
+	
+//飞行破限
+/*		UnFuck(g_libGTASA+0x510D60);
+	*(float*)(g_libGTASA+0x510D60) = 12345678.0;
+	*/
 
 	// no  vehicle name rendering
-	UnFuck(g_libGTASA+0x3D6FDC);
+	//不显示车辆名
+/*	UnFuck(g_libGTASA+0x3D6FDC);
 	NOP(g_libGTASA+0x3D6FDC, 2);
+	*/
 
 	// CTaskSimplePlayerOnFoot::PlayIdleAnimations 
 	WriteMemory(g_libGTASA+0x4BDB18, "\x70\x47", 2);
@@ -46,7 +53,8 @@ void ApplyInGamePatches()
 	NOP(g_libGTASA+0x398A34, 2);
 
 	// ToggleDebugFPS
-	//*(uint8_t*)(g_libGTASA+0x8ED875) = 1;
+	//显示FPS
+//	*(uint8_t*)(g_libGTASA+0x8ED875) = 1;
 
     // VehicleStruct increase (0x32C*0x50 = 0xFDC0)
     WriteMemory(g_libGTASA+0x405338, "\x4F\xF6\xC0\x50", 4);	// MOV  R0, #0xFDC0

@@ -10,7 +10,6 @@
 // imgui
 #include "imgui.h"
 #include "gui/renderware_imgui.h"
-
 extern CChatWindow *pChatWindow;
 extern CNetGame *pNetGame;
 extern CGame *pGame;
@@ -492,7 +491,7 @@ const char* fragmentShaderCode =
 	"void main(){\n"
 	"gl_FragColor = vColor;\n"
 	"}";
-
+	
 int LoadShader(int type, const char* shaderCode)
 {
 	int shader = glCreateShader(type);
@@ -532,7 +531,7 @@ bool NotifyEnterVehicle(VEHICLE_TYPE *_pVehicle)
 	if(VehicleID == INVALID_VEHICLE_ID) return false;
 	if(!pVehiclePool->GetSlotState(VehicleID)) return false;
 	pVehicleClass = pVehiclePool->GetAt(VehicleID);
-	//if(pVehicleClass->m_bDoorsLocked) return false;
+//	if(pVehicleClass->m_bDoorsLocked) return false;
 	if(pVehicleClass->m_pVehicle->entity.nModelIndex == TRAIN_PASSENGER) return false;
 
 	if(pVehicleClass->m_pVehicle->pDriver &&
@@ -560,7 +559,7 @@ extern "C" uint32_t NotifyEnterVehicle(uintptr_t** thiz, VEHICLE_TYPE *_pVehicle
  		if(VehicleID == INVALID_VEHICLE_ID) return false;
  		if(!pVehiclePool->GetSlotState(VehicleID)) return false;
  		CVehicle *pVehicleClass = pVehiclePool->GetAt(VehicleID);
- 		//if(pVehicleClass->m_bDoorsLocked) return false;
+ //		if(pVehicleClass->m_bDoorsLocked) return false;
  		if(pVehicleClass->m_pVehicle->entity.nModelIndex == TRAIN_PASSENGER) return false;
  
  		// if there's a ped driver, prevent entry
@@ -696,11 +695,11 @@ void __attribute__((naked))PickupPickUp_hook()
 	
 	//LOGI("dwParam1 = %d", dwParam1);
 	//LOGI("PickupID = %d", ((dwParam1-(g_libGTASA+0x70E264))/0x20) );
-	//if(pNetGame && pNetGame->GetPickupPool())
-	//{
-	//	CPickupPool *pPickups = pNetGame->GetPickupPool();
-	//	pPickups->PickedUp( ((dwParam1-(g_libGTASA+0x70E264))/0x20) );
-	//}
+	if(pNetGame && pNetGame->GetPickupPool())
+	{
+		CPickupPool *pPickups = pNetGame->GetPickupPool();
+		pPickups->PickedUp( ((dwParam1-(g_libGTASA+0x70E264))/0x20) );
+	}
 	__asm__ volatile("blx pickup_ololo\n\t");
 
 
@@ -738,7 +737,6 @@ void (*popcycle_display)();
 void popcycle_display_hook()
 {
 	ImGui_RenderWare_NewFrame();
-
 	if(pChatWindow)
 		pChatWindow->Draw();
 

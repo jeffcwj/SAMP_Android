@@ -27,7 +27,6 @@ void CChatWindow::Draw()
 	ImGui::SetWindowPos(ImVec2(CHAT_POS_X*RsGlobal->maximumWidth, CHAT_POS_Y*RsGlobal->maximumHeight));
 //大小
 		ImGui::SetWindowSize(ImVec2(CHAT_SIZE_X*RsGlobal->maximumWidth, CHAT_SIZE_Y*RsGlobal->maximumHeight));
-
 	std::list<CHAT_WINDOW_ENTRY>::iterator it = m_ChatWindowEntriesList.begin();
 	while(it != m_ChatWindowEntriesList.end())
 	{
@@ -57,6 +56,18 @@ void CChatWindow::Draw()
 
 	ImGui::SetScrollHere();
 	ImGui::End();
+	//聊天编辑框
+/*		ImGui::Begin("消息发送", (bool*)true, ImGuiWindowFlags_NoResize);
+			//位置
+	ImGui::SetWindowPos(ImVec2(CHAT_POS_X*RsGlobal->maximumWidth, CHAT_POS_Y*RsGlobal->maximumHeight+290));
+		ImGui::SetWindowSize(ImVec2(CHAT_SIZE_X*RsGlobal->maximumWidth, CHAT_SIZE_Y*RsGlobal->maximumHeight-180));
+	static char in[25] = {};
+ImGui::InputText(" ",in,sizeof(in));
+	ImGui::SetScrollHere();
+if(ImGui::Button("发送")){
+AddDebugMessage("Test");
+}
+ImGui::End();*/
 }
 
 void CChatWindow::AddChatMessage(char *szNick, uint32_t dwNickColor, char *szMessage)
@@ -140,13 +151,13 @@ ImGuiPlus::gbk_to_utf8(ChatWindowEntry.szMessageUtf8,szString);
 
 /**
 
-下面开始扯淡
+Down
 
 **/
 //-----------------------------------------------------------------
 
 
-//不需要GBK的调试对话框(这哥们不需要)
+//不需要GBK的调试对话框
 void CChatWindow::AddDebugMessageNoGBK(char *szFormat, ...)
 {
 	char tmp_buf[512];

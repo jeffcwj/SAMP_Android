@@ -2,8 +2,11 @@
 #include "RenderWare/RenderWare.h"
 #include "imgui.h"
 #include "renderware_imgui.h"
+#include "EncodingUtil.hpp"
 
-#define FONT_SCALE 0.015625f // 30px
+#define FONT_SCALE 0.013625f // 30px
+
+EncodingUtil*eu=new EncodingUtil();
 
 RwRaster* 	g_FontTexture = 0;
 uint32_t	g_Time = 0;
@@ -36,40 +39,6 @@ bool ImGuiPlus::ProcessInlineHexColor(const char* start, const char* end, ImVec4
 
   return false;
 }
-//简化转码
-int ImGuiPlus::code_to(char *f_charset,char* to_charset,char *inbuf,int inlen,char *outbuf,int outlen){
-
-iconv_t cd;
-int r;
-//输入字符串缓存区
-char **in=&inbuf;
-//输出字符串缓存区
-char **out=&outbuf;
-//打开编码模式
-cd=iconv_open(to_charset,f_charset);
-//如果打开失败就结束
-if(cd==0) return -1;
-//内存设置
-memset(outbuf,0,outlen);
-//开始转码
-if(iconv(cd,in,(size_t*)&inlen,out,(size_t*)&outlen)==-1) return -1;
-//转码后关闭iconv
-iconv_close(cd);
-//结束运行
-return 0;
-
-}
-//utf8 to gbk
-int ImGuiPlus::u_to_g(char *inbuf,int inlen,char *outbuf,int outlen)  
-{
-return code_to("UTF-8","GBK",inbuf,inlen,outbuf,outlen);
-}
-//gbk to utf8
-int ImGuiPlus::g_to_u(char *inbuf,int inlen,char *outbuf,int outlen)  
-{
-return code_to("GBK","UTF-8",inbuf,inlen,outbuf,outlen);
-}
-
 void ImGuiPlus::TextWithColors(const char* fmt, ...)
 {
   char tempStr[4096];
@@ -141,11 +110,41 @@ void ImGuiPlus::TextWithColors(const char* fmt, ...)
     ImGui::PopStyleColor();
   }
 }
-//utf8转gbk
-void ImGuiPlus::utf8_to_gbk(char *out,char *in){
-u_to_g(in,strlen(in),out,255);
+//简化转码
+int ImGuiPlus::code_to(char *f_charset,char* to_charset,char *inbuf,int inlen,char *outbuf,int outlen){
+ 
+iconv_t cd;
+int r;
+//输入字符串缓存区
+char **in=&inbuf;
+//输出字符串缓存区
+char **out=&outbuf;
+//打开编码模式
+cd=iconv_open(to_charset,f_charset);
+//如果打开失败就结束
+if(cd==0) return -1;
+//内存设置
+memset(outbuf,0,outlen);
+//开始转码
+if(iconv(cd,in,(size_t*)&inlen,out,(size_t*)&outlen)==-1) return -1;
+//转码后关闭iconv
+iconv_close(cd);
+//结束运行
+return 0;
+ 
 }
+
+//gbk to utf8
+int ImGuiPlus::g_to_u(char *inbuf,int inlen,char *outbuf,int outlen)  
+{
+return code_to("GBK","UTF-8",inbuf,inlen,outbuf,outlen);
+}
+ 
 //utf8转gbk
+char* ImGuiPlus::utf8_to_gbk(char *in){
+return eu->convertUTF8toGBK(in);
+}
+//gbk转utf8
 void ImGuiPlus::gbk_to_utf8(char *out,char *in){
 g_to_u(in,strlen(in),out,255);
 }
@@ -192,8 +191,7 @@ void ImGuiPlus::mo_ren(char *out, const char *in)
 //是空就填充为0
     *out = 0;
     }
-
-
+ 
 //下面是俄语支持 毛子用的
 // linux.org.ru/forum/development/3968525
 /*void ImGuiPlus::cp1251_to_utf8(char *out, const char *in) 
@@ -268,7 +266,6 @@ void ImGui_RenderWare_NewFrame()
 
 	ImGui::NewFrame();
 }
-
 void ImGui_RenderWare_DrawLists(ImDrawData *draw_data)
 {
 	ImGuiIO &io = ImGui::GetIO();
@@ -337,8 +334,11 @@ void ImGui_RenderWare_CreateDeviceObjects()
 	char* storage = (char*)(g_libGTASA+0x63C4B8);
 	sprintf(path, "%sSAMP/fonts/arial.ttf", storage);
 //	io.Fonts->AddFontFromFileTTF(path, RsGlobal->maximumWidth*FONT_SCALE, 0, io.Fonts->GetGlyphRangesCyrillic());
-		io.Fonts->AddFontFromFileTTF(path, 27, 0, io.Fonts->GetGlyphRangesChineseSimplifiedCommon());
+		io.Fonts->AddFontFromFileTTF(path,27,0, io.Fonts->GetGlyphRangesChineseSimplifiedCommon());
 	io.Fonts->GetTexDataAsRGBA32(&pxs, &width, &height, &bytes_per_pixel);
+	if(io.WantTextInput){
+	LOGI("User OnClick EditText");
+	}
 	LOGI("bytes_per_pixel: %d, %d, %d", width, height, bytes_per_pixel);
 
 	RwImage *font_img = RwImageCreate(width, height, bytes_per_pixel*8);

@@ -108,6 +108,14 @@ void CVehiclePool::Process()
 	}
 }
 
+void CVehiclePool::NotifyVehicleDeath(VEHICLEID VehicleID)
+{
+	RakNet::BitStream bsDeath;
+	bsDeath.Write(VehicleID);
+	pNetGame->GetRakClient()->RPC(&RPC_VehicleDestroyed, &bsDeath, HIGH_PRIORITY, RELIABLE_SEQUENCED, 0, false, UNASSIGNED_NETWORK_ID, NULL);
+	pNetGame->GetPlayerPool()->GetLocalPlayer()->m_LastVehicle = 0xFFFF; // Mark as notification sent
+}
+
 int CVehiclePool::FindNearestToLocalPlayerPed()
 {
 	float fLeastDistance = 10000.0f;

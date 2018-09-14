@@ -34,7 +34,8 @@ public:
 
 	VEHICLE_TYPE *GetGtaVehicle();
 	PED_TYPE *GetGtaActor() { return m_pPed; };
-
+ENTITY_TYPE * GetGtaContactEntity();
+	
 	bool IsAPassenger();
 
 	void SetVisible(bool bVisible);
