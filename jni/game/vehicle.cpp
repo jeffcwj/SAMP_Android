@@ -29,8 +29,8 @@ CVehicle::CVehicle(int iType, float fPosX, float fPosY, float fPosZ,
 
 		ScriptCommand(&create_car,iType,fPosX,fPosY,fPosZ+0.1f,&dwRetID);
 		ScriptCommand(&set_car_z_angle,dwRetID,fRotation);
-/*		ScriptCommand(&car_gas_tank_explosion,dwRetID,0);
-		ScriptCommand(&set_car_hydraulics,dwRetID,0);
+		ScriptCommand(&car_gas_tank_explosion,dwRetID,0);
+/*		ScriptCommand(&set_car_hydraulics,dwRetID,0);
 		ScriptCommand(&toggle_car_tires_vulnerable,dwRetID,0);
 		*/
 
@@ -86,7 +86,46 @@ CVehicle::~CVehicle()
 		}
 	}
 }
+void CVehicle::Recreate()
+{
+	unsigned int		uiType;
+	MATRIX4X4   mat;
+	uint8_t		byteColor1,byteColor2;
+	int		dwRetID;
 
+	if(m_pVehicle) {
+		// Save the existing info.
+		GetMatrix(&mat);
+		uiType = GetModelIndex();
+		byteColor1 = m_pVehicle->byteColor1;
+		byteColor2 = m_pVehicle->byteColor1;
+
+		ScriptCommand(&destroy_car,m_dwGTAId);
+
+		if(!pGame->IsModelLoaded(uiType)) {
+			pGame->RequestModel(uiType);
+			pGame->LoadRequestedModels();
+			while(!pGame->IsModelLoaded(uiType)){}
+		}
+
+		ScriptCommand(&create_car,uiType,mat.pos.X,mat.pos.Y,mat.pos.Z,&dwRetID);
+		ScriptCommand(&car_gas_tank_explosion,dwRetID,0);
+		
+		m_pVehicle = GamePool_Vehicle_GetAt(dwRetID);
+		m_pEntity = (ENTITY_TYPE *)m_pVehicle; 
+		m_dwGTAId = dwRetID;
+//		dwLastCreatedVehicleID = dwRetID;
+//		m_pVehicle->dwDoorsLocked = 0;
+//		m_bIsLocked = false;
+		//LinkToInterior(m_byteInterior);
+
+		SetMatrix(mat);
+		SetColor(byteColor1,byteColor2);
+
+		//pGame->RemoveModel(uiType);
+	}
+	
+}
 bool CVehicle::IsOccupied()
 {
 	if(m_pVehicle)
@@ -129,7 +168,7 @@ void CVehicle::SetInvulnerable(bool bInv)
 void CVehicle::SetColor(int iColor1, int iColor2)
 {
 	if(m_pVehicle)  {
-		//ScriptCommand(&set_car_color,m_dwGTAId,iColor1,iColor2);// This was crashing sometimes. 0x47eab8
+	//	ScriptCommand(&set_car_color,m_dwGTAId,iColor1,iColor2);// This was crashing sometimes. 0x47eab8
 		m_pVehicle->byteColor1 = (uint8_t)iColor1;
 		m_pVehicle->byteColor2 = (uint8_t)iColor2;
 	}

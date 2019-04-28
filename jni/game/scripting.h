@@ -43,9 +43,13 @@ const SCRIPT_COMMAND put_actor_in_car					= { 0x036A, "ii" };
 const SCRIPT_COMMAND put_actor_in_car2					= { 0x0430, "iii" };
 const SCRIPT_COMMAND destroy_car						= { 0x00A6, "i" };
 const SCRIPT_COMMAND set_car_immunities					= { 0x02ac, "iiiiii" };
+const SCRIPT_COMMAND car_gas_tank_explosion				= { 0x09C4, "ii" };
 //武器
 const SCRIPT_COMMAND set_actor_armed_weapon				= { 0x01b9, "ii" };
 const SCRIPT_COMMAND get_actor_armed_weapon				= { 0x0470, "iv" };
+
+const SCRIPT_COMMAND set_car_color						= { 0x0229, "iii" };	// var_car col1 col2
+
 //-------
 const SCRIPT_COMMAND toggle_car_tires_vulnerable		= { 0x053f, "ii" };
 const SCRIPT_COMMAND tie_marker_to_car					= { 0x0161, "iiiv" };

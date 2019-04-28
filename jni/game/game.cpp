@@ -94,6 +94,7 @@ void CGame::StartGame()
 	GameInstallHooks();
 
 	InitScripting();
+
 }
 
 void CGame::RequestModel(int iModelID, int iLoadingStream)
@@ -128,6 +129,12 @@ void CGame::SetWorldTime(int iHour, int iMinute)
 {
 	*(uint8_t*)(g_libGTASA+0x8B18A4) = (uint8_t)iMinute;
 	*(uint8_t*)(g_libGTASA+0x8B18A5) = (uint8_t)iHour;
+}
+
+void CGame::GetWorldTime(int* iHour, int* iMinute)
+{
+*(uint8_t*)iMinute=	*(uint8_t*)(g_libGTASA+0x8B18A4);
+	*(uint8_t*)iHour = *(uint8_t*)(g_libGTASA+0x8B18A5);
 }
 
 void CGame::ToggleThePassingOfTime(bool bOnOff)
@@ -267,7 +274,7 @@ int CGame::GetLocalMoney()
 	return 0;
 }
 ////////////////////////////////////////////////////////////////////////////////
-//发消息+发送命令智能判断
+//发消息和命令
 void CGame::SendMC(char * mc){
 if(mc[0]!='/'){
 SendChat(mc);
@@ -288,6 +295,7 @@ pNetGame->GetRakClient()->RPC(&RPC_Chat, &bsData, HIGH_PRIORITY,RELIABLE,0,false
 //////////////////////////////////////////////////////////////////////////////
 //发送命令
 void CGame::SendCommand(char *szCommand){
+//是否是rcon命令
 if(!strnicmp(szCommand+1,"rcon",4)){
  RakNet::BitStream bsData;
  bsData.Write((uint8_t)ID_RCON_COMMAND);
@@ -355,7 +363,7 @@ void CGame::EnableClock(bool bClock)
 	else
 	{
 		ToggleThePassingOfTime(0);
-		WriteMemory(g_libGTASA+0x599504, "sa:mp", 6);
+		WriteMemory(g_libGTASA+0x599504, "", 1);
 	}
 }
 
@@ -366,10 +374,8 @@ void CGame::EnableZoneNames(bool bEnable)
 //修改重力 (某些原因导致无法正常使用)
 /*void CGame::SetGravity(float fGravity)
 {
-	UnFuck(g_libGTASA+0x3A0AFA);
-	WriteMemory(g_libGTASA+0x3A0AFA, "1", 2);
-}
-*/
+ 		WriteMemory(g_libGTASA+0x3A0AFA,"2",2);
+}*/
 void CGame::ToggleCJWalk(bool toggle)
 {
 	if(toggle)

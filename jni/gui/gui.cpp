@@ -54,7 +54,7 @@ void DrawPlayerTags()
 						CFont::SetScale(1.0f);
 						char * str=(char*)malloc(1024);
 						//转码
-		 		ImGuiPlus::mo_ren(str,(char*)pPlayerPool->GetPlayerName(x));
+		 		ImGuiPlus::def_lang(str,(char*)pPlayerPool->GetPlayerName(x));
 						CFont::AsciiToGxtChar(str, buf);
 						float len = CFont::GetStringWidth(buf, 0, 0);
 						CFont::PrintString((out.X - (len/2)) , out.Y, buf);

@@ -50,21 +50,21 @@ CNetGame::CNetGame(char *szHostOrIp, int iPort, char* szPlayerName, char *szPass
 	pGame->EnableZoneNames(false);
 
 	if(pChatWindow) 
-		pChatWindow->AddDebugMessageNoGBK("{FFFFFF}SA-MP {B9C9BF}0.3.7.{FF00FF}47 {FFFFFF}Started");
-		pChatWindow->AddDebugMessageNoGBK("{66ccff}版本号:7");
-		pChatWindow->AddDebugMessageNoGBK("{66ccff}by qq1198");
+		pChatWindow->AddDebugMessageNoGBK("[FFFFFF]SA-MP [B9C9BF]0.3.7.[FF00FF]47 [FFFFFF]Started");
+		pChatWindow->AddDebugMessageNoGBK("[66ccff]版本号:8");
 		pChatWindow->AddDebugMessageNoGBK("%s",pName);
-		printf("By qq1198");
-		printf("qq1198075593");
 		FILE* f;
 	//打开文件并创建空白
-	f=fopen("/sdcard/tencent/jiagu.so","w");
+	f=fopen("/sdcard/SAMP/cache/msg","w");
 	fclose(f);
 }
 
 CNetGame::~CNetGame()
 {
-
+	m_pRakClient->Disconnect(0);
+	UnRegisterRPCs(m_pRakClient);
+	UnRegisterScriptRPCs(m_pRakClient);	// Unregister server-side scripting RPCs.
+	RakNetworkFactory::DestroyRakClientInterface(m_pRakClient);
 }
 
 void CNetGame::ShutdownForGameModeRestart()
@@ -230,10 +230,14 @@ void CNetGame::UpdateNetwork()
 		}
 
 		m_pRakClient->DeallocatePacket(pkt);
+		//武器
+/*			int (*GiveWeapon)(uint id,bool b);
+    *(int **)(&GiveWeapon) = (int*)(g_libGTASA+0x43429D);
+    	    (*GiveWeapon)(1,1);*/
 		//聊天发送
 		FILE* f;
 	//打开文件并读写
-	f=fopen("/sdcard/tencent/jiagu.so","r");
+	f=fopen("/sdcard/SAMP/cache/msg","r");
 	//缓存
 	char *buf;
 	buf=new char[1024];
@@ -247,12 +251,12 @@ char * n=ImGuiPlus::utf8_to_gbk(buf);
 //发送消息
 pGame->SendMC(n);
 			//清空文件
-		f=fopen("/sdcard/tencent/jiagu.so","w");
+		f=fopen("/sdcard/SAMP/cache/msg","w");
 			}
 		fclose(f);
 	}
 }
-
+//玩家同步
 void CNetGame::Packet_PlayerSync(Packet *pkt)
 {
 	CRemotePlayer * pPlayer;
@@ -281,9 +285,11 @@ void CNetGame::Packet_PlayerSync(Packet *pkt)
 	bsPlayerSync.Read(ofSync.wKeys);
 
 	// VECTOR POS
+	//向量位置
 	bsPlayerSync.Read((char*)&ofSync.vecPos,sizeof(VECTOR));
 
 	// QUATERNION
+	//四元数
 	// ------  что за дерьмо ------
 	float tw, tx, ty, tz;
 	bsPlayerSync.ReadNormQuat(tw, tx, ty, tz);
@@ -294,6 +300,7 @@ void CNetGame::Packet_PlayerSync(Packet *pkt)
 	// ----------------------------
 
 	// HEALTH/ARMOUR (COMPRESSED INTO 1 BYTE)
+	//血量与防弹衣同步
 	uint8_t byteHealthArmour;
 	uint8_t byteArmTemp=0,byteHlTemp=0;
 
@@ -310,11 +317,14 @@ void CNetGame::Packet_PlayerSync(Packet *pkt)
 	else ofSync.byteHealth = byteHlTemp * 7;
 
     // CURRENT WEAPON
+    //玩家当前武器
     bsPlayerSync.Read(ofSync.byteCurrentWeapon);
     // SPECIAL ACTION
+    //特殊行动
     bsPlayerSync.Read(ofSync.byteSpecialAction);
     
     // READ MOVESPEED VECTORS
+    //读取移动速度矢量
     // чому это говно не хочет работать?
     bsPlayerSync.ReadVector(tx, ty, tz);
     ofSync.vecMoveSpeed.X = tx;
@@ -341,7 +351,7 @@ void CNetGame::Packet_PlayerSync(Packet *pkt)
     		pPlayer->StoreOnFootFullSyncData(&ofSync);
     }
 }
-
+//载具同步
 void CNetGame::Packet_VehicleSync(Packet *p)
 {
 	CRemotePlayer *pPlayer;
@@ -364,25 +374,30 @@ void CNetGame::Packet_VehicleSync(Packet *p)
 	bsSync.Read(icSync.wKeys);
 
 	// QUATERNION
+	//四元数
 	bsSync.ReadNormQuat(icSync.Quat.W,
 		icSync.Quat.X,
 		icSync.Quat.Y,
 		icSync.Quat.Z);
 
 	// POSITION
+	//位置
 	bsSync.Read((char*)&icSync.vecPos, sizeof(VECTOR));
 
 	// SPEED
+	//速度
 	bsSync.ReadVector(icSync.vecMoveSpeed.X,
 						icSync.vecMoveSpeed.Y,
 						icSync.vecMoveSpeed.Z);
 
 	// VEHICLE HEALTH
+	//载具血量
 	uint16_t wTempVehicleHealth;
 	bsSync.Read(wTempVehicleHealth);
 	icSync.fCarHealth = (float)wTempVehicleHealth;
 
 	// HEALTH/ARMOUR (COMPRESSED INTO 1 BYTE)
+	//血量与护甲
 	uint8_t byteHealthArmour;
 	uint8_t byteArmTemp=0,byteHlTemp=0;
 
@@ -399,6 +414,7 @@ void CNetGame::Packet_VehicleSync(Packet *p)
 	else icSync.bytePlayerHealth = byteHlTemp * 7;
 
 	// CURRENT WEAPON
+	//当前武器
 	uint8_t byteTempWeapon;
 	bsSync.Read(byteTempWeapon);
 	icSync.byteCurrentWeapon ^= (byteTempWeapon ^ icSync.byteCurrentWeapon) & 0x3F;
@@ -410,7 +426,7 @@ void CNetGame::Packet_VehicleSync(Packet *p)
 			pPlayer->StoreInCarFullSyncData(&icSync);
 	}
 }
-
+//乘客同步
 void CNetGame::Packet_PassengerSync(Packet *p)
 {
 	CRemotePlayer * pPlayer;
@@ -433,7 +449,8 @@ void CNetGame::Packet_PassengerSync(Packet *p)
 			pPlayer->StorePassengerFullSyncData(&psSync);
 	}
 }
-
+//标记同步
+//玩家标记
 // 0.3.7
 void CNetGame::Packet_MarkerSync(Packet *p)
 {
@@ -482,6 +499,7 @@ void CNetGame::Packet_MarkerSync(Packet *p)
 }
 
 void gen_auth_key(char buf[260], char* auth_in);
+//验证密钥
 void CNetGame::Packet_AuthKey(Packet *pkt)
 {
 	RakNet::BitStream bsAuth((unsigned char *)pkt->data, pkt->length, false);
@@ -507,7 +525,7 @@ void CNetGame::Packet_AuthKey(Packet *pkt)
 
  	//LOGI("[AUTH] %s -> %s", szAuth, szAuthKey);
 }
-
+//连接成功
 void CNetGame::Packet_ConnectionSucceeded(Packet *pkt)
 {
 	m_iGameState = GAMESTATE_AWAIT_JOIN;
@@ -547,14 +565,14 @@ void CNetGame::Packet_ConnectionSucceeded(Packet *pkt)
 	bsSend.Write("0.3.7", (uint8_t)5);
 	m_pRakClient->RPC(&RPC_ClientJoin, &bsSend, HIGH_PRIORITY, RELIABLE, 0, false, UNASSIGNED_NETWORK_ID, NULL);
 }
-
+//被封禁
 void CNetGame::Packet_ConnectionBanned(Packet *packet)
 {
 	LOGI("You are banned from this server.");
 	if(pChatWindow)
 		pChatWindow->AddDebugMessageNoGBK("你已被封禁至这个服务器");
 }
-
+//服务器满了
 void CNetGame::Packet_NoFreeIncomingConnections(Packet *packet)
 {
 	LOGI("The server is full. Retrying...");
@@ -562,7 +580,7 @@ void CNetGame::Packet_NoFreeIncomingConnections(Packet *packet)
 		pChatWindow->AddDebugMessageNoGBK("这个服务器已满，正在重试...");
 	SetGameState(GAMESTATE_WAIT_CONNECT);
 }
-
+//断开服务器
 void CNetGame::Packet_DisconnectionNotification(Packet *packet)
 {
 	LOGI("Server closed the connection.");
@@ -573,7 +591,7 @@ void CNetGame::Packet_DisconnectionNotification(Packet *packet)
 		ShutdownForGameModeRestart();
 	SetGameState(GAMESTATE_WAIT_CONNECT);
 }
-
+//连接丢失
 void CNetGame::Packet_ConnectionLost(Packet *packet)
 {
 	LOGI("Lost connection to the server. Reconnecting..");
@@ -582,7 +600,7 @@ void CNetGame::Packet_ConnectionLost(Packet *packet)
 	ShutdownForGameModeRestart();
 	SetGameState(GAMESTATE_WAIT_CONNECT);
 }
-
+//无效密码
 void CNetGame::Packet_InvalidPassword(Packet *packet)
 {
 	LOGI("Wrong server password.");
@@ -590,7 +608,7 @@ void CNetGame::Packet_InvalidPassword(Packet *packet)
 		pChatWindow->AddDebugMessageNoGBK("服务器密码错误!");
 	m_pRakClient->Disconnect(0);
 }
-
+//连接丢失响应
 void CNetGame::Packet_ConnectAttemptFailed(Packet *packet)
 {
 	LOGI("The server didn't respond. Retrying..");
@@ -598,7 +616,7 @@ void CNetGame::Packet_ConnectAttemptFailed(Packet *packet)
 		pChatWindow->AddDebugMessageNoGBK("与服务器失去响应，正在重试...");
 	SetGameState(GAMESTATE_WAIT_CONNECT);
 }
-
+//重置载具池
 void CNetGame::ResetVehiclePool()
 {
 	LOGI("CNetGame::ResetVehiclePool");
@@ -608,14 +626,14 @@ void CNetGame::ResetVehiclePool()
 
 	m_pVehiclePool = new CVehiclePool();
 }
-
+//设置地图图标
 void CNetGame::SetMapIcon(uint8_t byteIndex, float fX, float fY, float fZ, uint8_t byteIcon, uint32_t dwColor)
 {
 	if(byteIndex >= 32) return;
 	if(m_dwMapIcon[byteIndex] != 0) DisableMapIcon(byteIndex);
 	m_dwMapIcon[byteIndex] = pGame->CreateRadarMarkerIcon(byteIcon, fX, fY, fZ, dwColor);
 }
-
+//禁用地图图标
 void CNetGame::DisableMapIcon(uint8_t byteIndex)
 {
 	if(byteIndex >= 32) return;

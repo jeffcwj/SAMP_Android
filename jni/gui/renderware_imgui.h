@@ -12,7 +12,7 @@ int g_to_u(char *inbuf,int inlen,char *outbuf,int outlen);
 //utf8转gbk
 char* utf8_to_gbk(char *in);
 //默认
-void mo_ren(char *out, const char *in);
+void def_lang(char *out, const char *in);
 }
 
 void ImGui_RenderWare_Init();

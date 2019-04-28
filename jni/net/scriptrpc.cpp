@@ -85,19 +85,19 @@ void ScrSetPlayerPosFindZ(RPCParameters *rpcParams)
 
 	pLocalPlayer->GetPlayerPed()->TeleportTo(vecPos.X, vecPos.Y, vecPos.Z);
 }
-
+//获取服务器给出的信息设置血量
 void ScrSetPlayerHealth(RPCParameters *rpcParams)
 {
-
 	unsigned char * Data = reinterpret_cast<unsigned char *>(rpcParams->input);
 	int iBitLength = rpcParams->numberOfBitsOfData;
-
+//得到本地玩家
 	CLocalPlayer *pLocalPlayer = pNetGame->GetPlayerPool()->GetLocalPlayer();
 	float fHealth;
-
+//读取数据
 	RakNet::BitStream bsData(Data,(iBitLength/8)+1,false);
+	//读取服务端血量
 	bsData.Read(fHealth);
-
+//设置血量
 	pLocalPlayer->GetPlayerPed()->SetHealth(fHealth);
 }
 
@@ -285,7 +285,7 @@ void ScrSetPlayerArmour(RPCParameters *rpcParams)
 
 	pLocalPlayer->GetPlayerPed()->SetArmour(fArmour);
 }
-
+//设置重力
 void ScrSetGravity(RPCParameters *rpcParams)
 {
 	LOGI("RPC_SCRSETGRAVITY");
@@ -298,8 +298,8 @@ void ScrSetGravity(RPCParameters *rpcParams)
 	RakNet::BitStream bsData(Data,(iBitLength/8)+1,false);
 	bsData.Read(fGravity);
 
-	// допилить
-	//pGame->SetGravity(fGravity);
+	//没写好...
+//	pGame->SetGravity(fGravity);
 }
 
 void ScrSetVehicleHealth(RPCParameters *rpcParams)
@@ -611,4 +611,39 @@ void RegisterScriptRPCs(RakClientInterface *pRakClient)
 	pRakClient->RegisterAsRemoteProcedureCall(&RPC_ScrTogglePlayerControllable, ScrTogglePlayerControllable);
 
 	pRakClient->RegisterAsRemoteProcedureCall(&RPC_ScrSetMapIcon, ScrSetMapIcon);
+}
+void UnRegisterScriptRPCs(RakClientInterface* pRakClient)
+{
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ScrSetSpawnInfo);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ScrSetPlayerSkin);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ScrSetPlayerPos);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ScrSetPlayerPosFindZ);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ScrSetPlayerHealth);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ScrPutPlayerInVehicle);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ScrDisplayGameText);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ScrSetInterior);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ScrSetCameraPos);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ScrSetCameraLookAt);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ScrSetVehiclePos);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ScrSetVehicleZAngle);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ScrSetCameraBehindPlayer);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ScrHaveSomeMoney);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ScrSetPlayerFacingAngle);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ScrResetMoney);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ScrSetPlayerArmour);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ScrSetGravity);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ScrSetVehicleHealth);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ScrCreateExplosion);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ScrSetPlayerWantedLevel);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ScrAddGangZone);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ScrRemoveGangZone);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ScrFlashGangZone);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ScrStopFlashGangZone);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ScrSetPlayerColor);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ScrCreateObject);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ScrSetObjectPos);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ScrDestroyObject);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ScrTogglePlayerControllable);
+
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ScrSetMapIcon);
 }

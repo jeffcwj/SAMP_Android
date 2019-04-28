@@ -1,4 +1,7 @@
 #include "main.h"
+#include "imgui.h"
+#include "RenderWare/RenderWare.h"
+#include "gui/renderware_imgui.h"
 
 extern CGame *pGame;
 extern CNetGame *pNetGame;
@@ -143,8 +146,9 @@ void InitGame(RPCParameters *rpcParams)
 	pLocalPlayer->RequestSpawn();
 	pLocalPlayer->m_bWaitingForSpawnRequestReply = true;
 	// ========================================
-
-	pChatWindow->AddDebugMessageNoGBK("已连接到 {B9C9BF}%.64s", pNetGame->m_szHostName);
+	//修正乱码
+	char *szString=ImGuiPlus::utf8_to_gbk("已连接至");
+	pChatWindow->AddDebugMessage("%s [B9C9BF]%.64s",szString, pNetGame->m_szHostName);
 }
 
 void Chat(RPCParameters *rpcParams)
@@ -175,6 +179,26 @@ void Chat(RPCParameters *rpcParams)
 		if(pRemotePlayer) {
 			pRemotePlayer->Say((unsigned char *)szText);
 		}
+	}
+}
+
+void ToggleClock(RPCParameters *rpcParams)
+{
+unsigned char * Data = reinterpret_cast<unsigned char *>(rpcParams->input);
+	int iBitLength = rpcParams->numberOfBitsOfData;
+
+	RakNet::BitStream bsData(Data,(iBitLength/8)+1,false);
+	uint8_t byteClock;
+	bsData.Read(byteClock);
+	pGame->EnableClock(byteClock);	
+	if (byteClock)
+	{
+		pNetGame->m_byteHoldTime = 0;
+	}
+	else
+	{
+		pNetGame->m_byteHoldTime = 1;
+		pGame->GetWorldTime((int*)&pNetGame->m_byteWorldTime, (int*)&pNetGame->m_byteWorldMinute);
 	}
 }
 
@@ -602,7 +626,38 @@ void RegisterRPCs(RakClientInterface *pRakClient)
 	pRakClient->RegisterAsRemoteProcedureCall(&RPC_ScrDialogBox, DialogBox);
 	pRakClient->RegisterAsRemoteProcedureCall(&RPC_Pickup, Pickup);
 	pRakClient->RegisterAsRemoteProcedureCall(&RPC_DestroyPickup, DestroyPickup);
-
+	pRakClient->RegisterAsRemoteProcedureCall(&RPC_ToggleClock, ToggleClock); // 31
+	
 	pRakClient->RegisterAsRemoteProcedureCall(&RPC_SetRaceCheckpoint, SetRaceCheckpoint);
 	pRakClient->RegisterAsRemoteProcedureCall(&RPC_DisableRaceCheckpoint, DisableRaceCheckpoint);
+}
+
+void UnRegisterRPCs(RakClientInterface * pRakClient)
+{
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_InitGame);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_Chat);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ClientMessage);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_RequestClass);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_RequestSpawn);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ServerJoin);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ServerQuit);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_WorldPlayerAdd);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_WorldPlayerRemove);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_WorldVehicleAdd);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_WorldVehicleRemove);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_SetCheckpoint);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_DisableCheckpoint);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_GameModeRestart);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_WorldTime);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_Weather);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_EnterVehicle);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ExitVehicle);
+	
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ScrDialogBox);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_Pickup);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_DestroyPickup);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_ToggleClock); // 31
+	
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_SetRaceCheckpoint);
+	pRakClient->UnregisterAsRemoteProcedureCall(&RPC_DisableRaceCheckpoint);
 }

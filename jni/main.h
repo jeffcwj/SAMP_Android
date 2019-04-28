@@ -6,6 +6,8 @@
 #include <algorithm>
 #include <list>
 #include <string>
+#include <fstream>
+#include <vector>
 #include <sys/mman.h>
 #include <android/log.h>
 #define MAX_PLAYER_NAME			24
@@ -52,7 +54,7 @@
 #include "util/quaternion.h"
 #include "util/armhook.h"
 
-#define LOGI(...)  __android_log_print(ANDROID_LOG_INFO, "qq1198", __VA_ARGS__)
+#define LOGI(...)  __android_log_print(ANDROID_LOG_INFO, "SAMP_Debug", __VA_ARGS__)
 #define VERSION "SA:MP 0.3.7-5b"
 
 #ifndef PAGESIZE
