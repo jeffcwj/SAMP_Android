@@ -1,8 +1,13 @@
-// updated to 0.3.7
 #include "main.h"
+#include "game/game.h"
+#include "chatwindow.h"
+#include "net/netgame.h"
+#include "settings.h"
 
 extern CGame *pGame;
+extern CChatWindow *pChatWindow;
 extern CNetGame *pNetGame;
+extern CSettings *pSettings;
 
 CPickupPool::CPickupPool()
 {
@@ -70,7 +75,7 @@ void CPickupPool::PickedUp(int iPickup)
 {
 	int index = GetNumberFromID(iPickup);
 
-	LOGI("CPickupPool::PickedUp index = %d", index);
+	Log("CPickupPool::PickedUp index = %d", index);
 
 	if(index < 0 || index >= MAX_PICKUPS) return;
 	if(m_dwHnd[index] != 0 && m_iTimer[index] == 0)
@@ -79,6 +84,7 @@ void CPickupPool::PickedUp(int iPickup)
 
 		RakNet::BitStream bsPickup;
 		bsPickup.Write(index);
+		if(pChatWindow && pSettings->Get().bDebug) pChatWindow->AddDebugMessage("RPC: Sending RPC_PickedUpPickup (PickedUp: %d)", index);
 		pNetGame->GetRakClient()->RPC(&RPC_PickedUpPickup, &bsPickup, HIGH_PRIORITY, RELIABLE_SEQUENCED, 0, false, UNASSIGNED_NETWORK_ID, 0);
 		m_iTimer[index] = 15;
 	}
@@ -94,7 +100,7 @@ void CPickupPool::Process()
 			{
 				if (ScriptCommand(&is_pickup_picked_up, m_dwHnd[i]))
 				{
-					LOGI("Picked up %u", i);
+					Log("Picked up %u", i);
 					RakNet::BitStream bsPickup;
 					if(m_droppedWeapon[i].bDroppedWeapon)
 					{

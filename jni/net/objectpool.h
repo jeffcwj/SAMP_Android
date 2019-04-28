@@ -1,6 +1,7 @@
 #pragma once
 
 #define INVALID_OBJECT_ID	0xFFF9
+#define MAX_OBJECTS			1000
 
 class CObjectPool
 {

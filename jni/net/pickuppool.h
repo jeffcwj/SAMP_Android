@@ -1,4 +1,3 @@
-// updated to 0.3.7
 #pragma once
 
 #define MAX_PICKUPS 4096

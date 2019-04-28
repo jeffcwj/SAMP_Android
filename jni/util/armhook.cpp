@@ -1,89 +1,113 @@
-#include "main.h"
+#include "../main.h"
+#include <sys/mman.h>
 
-#define HOOK_PROC   "\x01\xB4\x01\xB4\x01\x48\x01\x90\x01\xBD\x00\xBF\x00\x00\x00\x00"
+#define HOOK_PROC "\x01\xB4\x01\xB4\x01\x48\x01\x90\x01\xBD\x00\xBF\x00\x00\x00\x00"
 
-uintptr_t mmap_start = 0,
-    mmap_end = 0,
-    memlib_start = 0,
-    memlib_end = 0;
-
-void UnFuck(uintptr_t target)
+uintptr_t mmap_start 	= 0;
+uintptr_t mmap_end		= 0;
+uintptr_t memlib_start	= 0;
+uintptr_t memlib_end	= 0;
+//从首地址段到0xFFFFF000更改为777权限
+void UnFuck(uintptr_t ptr)
 {
-    mprotect((void*)(target & 0xFFFFF000), PAGESIZE, PROT_READ | PROT_WRITE | PROT_EXEC);
+	mprotect((void*)(ptr & 0xFFFFF000), PAGE_SIZE, PROT_READ | PROT_WRITE | PROT_EXEC);
 }
-
-// 1NOP = 2bt
-void NOP(uintptr_t dest, size_t size)
+//空指令
+void NOP(uintptr_t addr, unsigned int count)
 {
-    // le govnocode
-    for(uint32_t ptr = dest; ptr != (dest + size*2); ptr+=2)
+    UnFuck(addr);
+
+    for(uintptr_t ptr = addr; ptr != (addr+(count*2)); ptr += 2)
     {
         *(char*)ptr = 0x00;
         *(char*)(ptr+1) = 0x46;
     }
 
-    //cacheflush(dest, dest+size, 0);
-    __builtin___clear_cache((char*)dest, (char*)(dest+size*2));
+    cacheflush(addr, (uintptr_t)(addr + count*2), 0);
 }
-
-void WriteMemory(uintptr_t dest, const char* src, size_t size)
+//写入内存
+void WriteMemory(uintptr_t dest, uintptr_t src, size_t size)
 {
-    mprotect((void*)(dest & 0xFFFFF000), PAGESIZE, PROT_READ | PROT_WRITE | PROT_EXEC);
-    memcpy((void*)dest, (void*)src, size);
-    //cacheflush(dest, dest+size, 0);
-    __builtin___clear_cache((char*)dest, (char*)(dest+size));
+	UnFuck(dest);
+	memcpy((void*)dest, (void*)src, size);
+	cacheflush(dest, dest+size, 0);
 }
-
+//读取内存
 void ReadMemory(uintptr_t dest, uintptr_t src, size_t size)
 {
-    mprotect((void*)(src & 0xFFFFF000), PAGESIZE, PROT_READ | PROT_WRITE | PROT_EXEC);
+    UnFuck(src);
     memcpy((void*)dest, (void*)src, size);
 }
-
+//初始化Hook相关操作
 void InitHookStuff()
 {
-    memlib_start = g_libGTASA+0x1D941C; // gzprintf
-    memlib_end = memlib_start+0x100;
-
-    mmap_start = (uintptr_t)mmap(0, PAGESIZE, PROT_WRITE | PROT_READ | PROT_EXEC,
-      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-        mprotect((void*)(mmap_start & 0xFFFFF000), PAGESIZE, PROT_READ | PROT_WRITE | PROT_EXEC);
-    mmap_end = (mmap_start + PAGESIZE);
+    Log("Initializing hook system..");
+	memlib_start = g_libGTASA+0x180044;
+	memlib_end = memlib_start + 0x290;
+//映射so文件到内存
+	mmap_start = (uintptr_t)mmap(0, PAGE_SIZE, PROT_WRITE | PROT_READ | PROT_EXEC, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	mprotect((void*)(mmap_start & 0xFFFFF000), PAGE_SIZE, PROT_READ | PROT_EXEC | PROT_WRITE);
+	mmap_end = (mmap_start + PAGE_SIZE);
 }
-
+//跳指令
 void JMPCode(uintptr_t func, uintptr_t addr)
 {
-    uint32_t code = ((addr-func-4) >> 12) & 0x7FF | 0xF000 | ((((addr-func-4) >> 1) & 0x7FF | 0xB800) << 16);
-    WriteMemory(func, (const char*)&code, 4);
+	uint32_t code = ((addr-func-4) >> 12) & 0x7FF | 0xF000 | ((((addr-func-4) >> 1) & 0x7FF | 0xB800) << 16);
+    WriteMemory(func, (uintptr_t)&code, 4);
 }
-
+//写入proc
 void WriteHookProc(uintptr_t addr, uintptr_t func)
 {
     char code[16];
     memcpy(code, HOOK_PROC, 16);
     *(uint32_t*)&code[12] = (func | 1);
-    WriteMemory(addr, (const char*)code, 16);
+    WriteMemory(addr, (uintptr_t)code, 16);
 }
-
+//设置up钩子
 void SetUpHook(uintptr_t addr, uintptr_t func, uintptr_t *orig)
 {
+	Log("SetUpHook: 0x%X -> 0x%X", addr, func);
+
     if(memlib_end < (memlib_start + 0x10) || mmap_end < (mmap_start + 0x20))
     {
-        LOGI("space limit reached");
-        exit(1);
+        Log("SetUpHook: space limit reached");
+        std::terminate();
     }
-
+    
     ReadMemory(mmap_start, addr, 4);
     WriteHookProc(mmap_start+4, addr+4);
     *orig = mmap_start+1;
     mmap_start += 32;
+
     JMPCode(addr, memlib_start);
     WriteHookProc(memlib_start, func);
     memlib_start += 16;
 }
-
+//装载函数钩子
 void InstallMethodHook(uintptr_t addr, uintptr_t func)
 {
+	Log("InstallMethodHook: func: 0x%X -> 0x%X", addr, func);
+
     UnFuck(addr);
     *(uintptr_t*)addr = func;
+}
+//代码注入
+void CodeInject(uintptr_t addr, uintptr_t func, int reg)
+{
+    Log("CodeInject: 0x%X -> 0x%x (register: r%d)", addr, func, reg);
+
+    char injectCode[12];
+
+    injectCode[0] = 0x01;
+    injectCode[1] = 0xA0 + reg;
+    injectCode[2] = (0x08 * reg) + reg;
+    injectCode[3] = 0x68;
+    injectCode[4] = 0x87 + (0x08 * reg);
+    injectCode[5] = 0x46;
+    injectCode[6] = injectCode[4];
+    injectCode[7] = injectCode[5];
+    
+    *(uintptr_t*)&injectCode[8] = func;
+
+    WriteMemory(addr, (uintptr_t)injectCode, 12);
 }

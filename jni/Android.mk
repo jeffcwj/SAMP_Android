@@ -3,26 +3,30 @@ LOCAL_PATH := $(call my-dir)
 include $(CLEAR_VARS)
 
 LOCAL_MODULE := samp
-LOCAL_LDLIBS += -llog
+LOCAL_LDLIBS := -llog
+
+# samp
 FILE_LIST := $(wildcard $(LOCAL_PATH)/*.cpp)
-FILE_LIST += $(wildcard $(LOCAL_PATH)/util/*.cpp)
-FILE_LIST += $(wildcard $(LOCAL_PATH)/RakNet/*.cpp)
-FILE_LIST += $(wildcard $(LOCAL_PATH)/RakNet/SAMP/*.cpp)
 FILE_LIST += $(wildcard $(LOCAL_PATH)/game/*.cpp)
 FILE_LIST += $(wildcard $(LOCAL_PATH)/net/*.cpp)
+FILE_LIST += $(wildcard $(LOCAL_PATH)/util/*.cpp)
+FILE_LIST += $(wildcard $(LOCAL_PATH)/game/RW/RenderWare.cpp)
 FILE_LIST += $(wildcard $(LOCAL_PATH)/gui/*.cpp)
-FILE_LIST += $(wildcard $(LOCAL_PATH)/gui/imgui/*.cpp)
-FILE_LIST += $(wildcard $(LOCAL_PATH)/RenderWare/*.cpp)
-FILE_LIST += $(wildcard $(LOCAL_PATH)/../../imgui/*.cpp)
-LOCAL_SRC_FILES += $(FILE_LIST:$(LOCAL_PATH)/%=%)
-LOCAL_C_INCLUDES += $(LOCAL_PATH)/RakNet/SAMP
-LOCAL_C_INCLUDES += $(LOCAL_PATH)/../../imgui
 
+# vendor
+FILE_LIST += $(wildcard $(LOCAL_PATH)/vendor/inih/cpp/INIReader.cpp)
+FILE_LIST += $(wildcard $(LOCAL_PATH)/vendor/inih/ini.c)
+FILE_LIST += $(wildcard $(LOCAL_PATH)/vendor/RakNet/*.cpp)
+FILE_LIST += $(wildcard $(LOCAL_PATH)/vendor/RakNet/SAMP/*.cpp)
+FILE_LIST += $(wildcard $(LOCAL_PATH)/vendor/imgui/*.cpp)
+FILE_LIST += $(wildcard $(LOCAL_PATH)/vendor/hash/md5.cpp)
+
+LOCAL_SRC_FILES := $(FILE_LIST:$(LOCAL_PATH)/%=%)
+
+#android lib
 LOCAL_WHOLE_STATIC_LIBRARIES += android_support
  
-LOCAL_CPPFLAGS += -D_ARM_ -DRAKSAMP_CLIENT -D_RAKNET_THREADSAFE
-LOCAL_CPPFLAGS += -w -pthread -fpack-struct=1 -Wall -fdiagnostics-color=auto -O2 -ffast-math -std=c++11
-
+LOCAL_CPPFLAGS := -w -s -fvisibility=hidden -pthread -Wall -fpack-struct=1 -O2 -std=c++14 -fexceptions
 include $(BUILD_SHARED_LIBRARY)
- 
+
 $(call import-module,android/support)

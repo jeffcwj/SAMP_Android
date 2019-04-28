@@ -8,7 +8,7 @@ public:
 	uint8_t		m_byteMoving;
 	float		m_fMoveSpeed;
 	bool		m_bIsPlayerSurfing;
-	VECTOR					m_vPlayerSurfOffs; // derive surf offsets
+
 	CObject(int iModel, float fPosX, float fPosY, float fPosZ, VECTOR vecRot, float fDrawDistance);
 	~CObject();
 

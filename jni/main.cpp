@@ -1,109 +1,252 @@
-#include "main.h"
-#include "jni.h"
-#include <pthread.h>
-#include <dlfcn.h>
-#include "game/util.h"
-#include "game/keystuff.h"
-#include "imgui.h"
-#include "RenderWare/RenderWare.h"
-#include "gui/renderware_imgui.h"
-CGame		*pGame = 0;
-CNetGame	*pNetGame = 0;
-CChatWindow *pChatWindow = 0;
-static std::string pName="";
-bool bGameInited = false;
-bool bNetworkInited = false;
-uintptr_t g_libGTASA = 0;
-std::vector<std::string> item;
+/**
 
-void *Init(void *p)
+https://github.com/4x11/build69
+版权归属:4x11
+
+**/
+
+#include <jni.h>
+#include <android/log.h>
+#include <ucontext.h>
+#include <pthread.h>
+
+#include "main.h"
+#include "game/game.h"
+#include "game/RW/RenderWare.h"
+#include "net/netgame.h"
+#include "gui/gui.h"
+#include "chatwindow.h"
+#include "spawnscreen.h"
+#include "playertags.h"
+#include "dialog.h"
+#include "keyboard.h"
+#include "settings.h"
+#include "debug.h"
+
+#include "util/armhook.h"
+#include "checkfilehash.h"
+
+uintptr_t g_libGTASA = 0;
+const char* g_pszStorage = nullptr;
+
+CGame *pGame = nullptr;
+CNetGame *pNetGame = nullptr;
+CChatWindow *pChatWindow = nullptr;
+CSpawnScreen *pSpawnScreen = nullptr;
+CPlayerTags *pPlayerTags = nullptr;
+CDialogWindow *pDialogWindow = nullptr;
+
+CGUI *pGUI = nullptr;
+CKeyBoard *pKeyBoard = nullptr;
+CDebug *pDebug = nullptr;
+CSettings *pSettings = nullptr;
+
+void InitHookStuff();
+void InstallSpecialHooks();
+void InitRenderWareFunctions();
+void ApplyInGamePatches();
+void ApplyPatches_level0();
+void MainLoop();
+
+void InitSAMP()
 {
-	pGame = new CGame();
-	pGame->InitGame();
-	
-	while(true)
+	Log("Initializing SAMP..");
+	//数据包位置
+	g_pszStorage = (const char*)(g_libGTASA+0x63C4B8);
+
+	if(!g_pszStorage)
 	{
-		if(*(uintptr_t*)(g_libGTASA+ADDR_GAMESTATE) == 7)
-		{
-			pGame->StartGame();
-			break;
-		}
-		else
-			usleep(5000);
+		Log("Error: storage path not found!");
+		std::terminate();
+		return;
 	}
 
-	pthread_exit(0);
+	Log("Storage: %s", g_pszStorage);
+	
+	pSettings = new CSettings();
+	Log("Checking samp files..");
+	if(!FileCheckSum())
+	{
+		Log("SOME FILES HAVE BEEN MODIFIED. YOU NEED REINSTALL SAMP!");
+		std::terminate();
+		return;
+	}
 }
-
-/* ============= */
-
-void DoInitStuff()
+//初始化菜单
+void InitInMenu()
 {
+	pGame = new CGame();
+	pGame->InitInMenu();
+	
+		if(pSettings->Get().bDebug)
+	//初始化调试
+		pDebug = new CDebug();
+//初始化GUI
+	pGUI = new CGUI();
+	//初始化键盘
+	pKeyBoard = new CKeyBoard();
+	//初始化聊天窗口
+	pChatWindow = new CChatWindow();
+	//初始化屏幕
+	pSpawnScreen = new CSpawnScreen();
+	//初始化玩家标签
+	pPlayerTags = new CPlayerTags();
+	//初始化对话框窗口
+	pDialogWindow = new CDialogWindow();
+}
+//初始化游戏
+void InitInGame()
+{
+	static bool bGameInited = false;
+	static bool bNetworkInited = false;
+
 	if(!bGameInited)
 	{
-		pChatWindow = new CChatWindow();
-		
+	//初始化
+		pGame->InitInGame();
+		pGame->SetMaxStats();
+
+		if(pDebug && !pSettings->Get().bOnline)
+		{
+			pDebug->SpawnLocalPlayer();
+		}
+
 		bGameInited = true;
 		return;
 	}
 
-	if(!bNetworkInited)
+	if(!bNetworkInited && pSettings->Get().bOnline)
 	{
-		//========
-		//随机玩家名不需要
-/*		char nick[10];
-		gen_random(nick, 8);
-		*/
-		//========
-		//打开文件流
- FILE *f;
-	char buf[256];
-	f=fopen("/sdcard/SAMP/samp.txt","r");
-		while(!feof(f))
+		pNetGame = new CNetGame(pSettings->Get().szHost,
+			pSettings->Get().iPort, 
+			pSettings->Get().szNickName,
+			pSettings->Get().szPassword);
+		bNetworkInited = true;
+		return;
+	}
+}
+
+void MainLoop()
+{
+//初始化游戏
+	InitInGame();
+	if(pDebug) pDebug->Process();
+	if(pNetGame) pNetGame->Process();
+}
+
+void handler(int signum, siginfo_t *info, void* contextPtr)
+{
+	ucontext* context = (ucontext_t*)contextPtr;
+
+	if(info->si_signo == SIGSEGV)
 	{
-		memset(buf, 0, sizeof(buf));
-		//读行
-		fscanf(f,"%s",buf);
-			//推入vector
-	 	item.push_back(buf);
+		Log("SIGSEGV | Fault address: 0x%X", info->si_addr);
+		Log("libGTASA base address: 0x%X", g_libGTASA);
+		Log("register states:");
+
+		Log("r0: 0x%X, r1: 0x%X, r2: 0x%X, r3: 0x%X", 
+			context->uc_mcontext.arm_r0, 
+			context->uc_mcontext.arm_r1, 
+			context->uc_mcontext.arm_r2,
+			context->uc_mcontext.arm_r3);
+		Log("r4: 0x%x, r5: 0x%x, r6: 0x%x, r7: 0x%x",
+			context->uc_mcontext.arm_r4,
+			context->uc_mcontext.arm_r5,
+			context->uc_mcontext.arm_r6,
+			context->uc_mcontext.arm_r7);
+		Log("r8: 0x%x, r9: 0x%x, sl: 0x%x, fp: 0x%x",
+			context->uc_mcontext.arm_r8,
+			context->uc_mcontext.arm_r9,
+			context->uc_mcontext.arm_r10,
+			context->uc_mcontext.arm_fp);
+		Log("ip: 0x%x, sp: 0x%x, lr: 0x%x, pc: 0x%x",
+			context->uc_mcontext.arm_ip,
+			context->uc_mcontext.arm_sp,
+			context->uc_mcontext.arm_lr,
+			context->uc_mcontext.arm_pc);
+
+		Log("backtrace:");
+		Log("1: libGTASA.so + 0x%X", context->uc_mcontext.arm_pc - g_libGTASA);
+		Log("2: libGTASA.so + 0x%X", context->uc_mcontext.arm_lr - g_libGTASA);
+
+		exit(0);
 	}
-	fclose(f);
-			std::string ip = item[0].substr(0,item[0].find_last_of(":"));
-   std::string port = item[0].substr(item[0].find_last_of(":") + 1);
-   //赋值
-pName="[66ccff]游戏名:"+item[1];
-char * name=ImGuiPlus::utf8_to_gbk((char*)item[1].c_str());
-	 //IP,端口,真玩家名称,服务器密码,玩家名称
-pNetGame = new CNetGame((char*)ip.data(),atoi(port.c_str()),name,(char*)item[2].c_str(),(char*)pName.c_str());
-bNetworkInited = true;
-	}
+
+	return;
+}
+
+void *Init(void *p)
+{
+	ApplyPatches_level0();
+
+	pthread_exit(0);
 }
 
 jint JNI_OnLoad(JavaVM *vm, void *reserved)
 {
-	LOGI("libSAMP.so loaded! (" __DATE__ ")");
-	g_libGTASA = findLibrary("libGTASA.so");
-
-	if(!g_libGTASA)
+	Log("SAMP library loaded! Build time: " __DATE__ " " __TIME__);
+//拿到so地址
+	g_libGTASA = FindLibrary("libGTASA.so");
+	if(g_libGTASA == 0)
 	{
-		LOGI("libGTASA.so address not found.");
+		Log("ERROR: libGTASA.so address not found!");
 		return 0;
 	}
-	LOGI("libGTASA.so imagebase address 0x%X", g_libGTASA);
-	
+
+	Log("libGTASA.so image base address: 0x%X", g_libGTASA);
+
+	srand(time(0));
+//初始化Hook
 	InitHookStuff();
+	//初始化RenderWare引擎函数
 	InitRenderWareFunctions();
+	InstallSpecialHooks();
 
 	pthread_t thread;
+	//创建线程
 	pthread_create(&thread, 0, Init, 0);
 
-	LOGI(VERSION " Inited!");
+	struct sigaction act;
+	act.sa_sigaction = handler;
+	sigemptyset(&act.sa_mask);
+	act.sa_flags = SA_SIGINFO;
+	sigaction(SIGSEGV, &act, 0);
+
 	return JNI_VERSION_1_4;
+}
+
+void Log(const char *fmt, ...)
+{	
+	char buffer[0xFF];
+	static FILE* flLog = nullptr;
+
+	if(flLog == nullptr && g_pszStorage != nullptr)
+	{
+		sprintf(buffer, "/sdcard/SAMP/samp_log.txt", g_pszStorage);
+		flLog = fopen(buffer, "a");
+	}
+
+	memset(buffer, 0, sizeof(buffer));
+
+	va_list arg;
+	va_start(arg, fmt);
+	vsnprintf(buffer, sizeof(buffer), fmt, arg);
+	va_end(arg);
+
+	__android_log_write(ANDROID_LOG_INFO, "SAMP_Debug", buffer);
+
+	if(pDebug) pDebug->AddMessage(buffer);
+
+	if(flLog == nullptr) return;
+	fprintf(flLog, "%s\n", buffer);
+	fflush(flLog);
+
+	return;
 }
 
 uint32_t GetTickCount()
 {
-    struct timeval tv;
-    gettimeofday(&tv,NULL);
-    return (tv.tv_sec*1000+tv.tv_usec/1000);
+	struct timeval tv;
+	gettimeofday(&tv, nullptr);
+	return (tv.tv_sec*1000+tv.tv_usec/1000);
 }

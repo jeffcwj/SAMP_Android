@@ -1,17 +1,16 @@
-#include "main.h"
+#include "../main.h"
+#include "scripting.h"
 
-GAME_SCRIPT_THREAD *gst;
-uint8_t ScriptBuf[255];
+GAME_SCRIPT_THREAD* gst;
+char ScriptBuf[0xFF];
 uintptr_t *pdwParamVars[18];
 
-int ExecuteScriptBuf()
+uint8_t ExecuteScriptBuf()
 {
 	gst->dwScriptIP = (uintptr_t)ScriptBuf;
-	uint32_t (*ProcessOneCommand)(GAME_SCRIPT_THREAD*);
-	*(void **) (&ProcessOneCommand) = (void*)(g_libGTASA+ADDR_PROCESSONECOMMAND+1);
-	(*ProcessOneCommand)(gst);
+	(( void (*)(GAME_SCRIPT_THREAD*))(g_libGTASA+0x2E1D2C+1))(gst);
 
-	return 1;
+	return gst->condResult;
 }
 
 int ScriptCommand(const SCRIPT_COMMAND *pScriptCommand, ...)
@@ -58,6 +57,24 @@ int ScriptCommand(const SCRIPT_COMMAND *pScriptCommand, ...)
 				memcpy(&ScriptBuf[buf_pos], &var_pos, 2);
 				buf_pos += 2;
 				var_pos++;
+				break;
+			}
+			case 's':	// If string... Updated 13th Jan 06.. (kyeman) SA string support
+			{
+				char* sz = va_arg(ap, char*);
+				unsigned char aLen = strlen(sz);
+				ScriptBuf[buf_pos] = 0x0E;
+				buf_pos++;
+				ScriptBuf[buf_pos] = aLen;
+				buf_pos++;
+				memcpy(&ScriptBuf[buf_pos],sz,aLen);				
+				buf_pos += aLen;
+				break;
+			}
+			case 'z':	// If the params need zero-terminating...
+			{
+				ScriptBuf[buf_pos] = 0x00;			
+				buf_pos++;
 				break;
 			}
 			default:

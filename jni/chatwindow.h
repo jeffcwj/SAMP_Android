@@ -1,8 +1,7 @@
 #pragma once
 
-#define MAX_MESSAGE_LENGTH 		128
-#define MAX_LINE_LENGTH			MAX_MESSAGE_LENGTH/2
-#define MAX_MESSAGES			100
+#define MAX_MESSAGE_LENGTH	144
+#define MAX_LINE_LENGTH		MAX_MESSAGE_LENGTH / 2
 
 enum eChatMessageType
 {
@@ -12,39 +11,50 @@ enum eChatMessageType
 	CHAT_TYPE_DEBUG
 };
 
-typedef struct _CHAT_WINDOW_ENTRY
+typedef struct
 {
-	eChatMessageType eType;
-	char 		szMessageUtf8[MAX_MESSAGE_LENGTH*4];
-	char		szNick[MAX_PLAYER_NAME+1];
-	uint32_t	dwTextColor;
-	uint32_t	dwNickColor;
+	eChatMessageType	eType;
+	char 				utf8Message[MAX_MESSAGE_LENGTH * 3 + 1];
+	char 				szNick[MAX_PLAYER_NAME + 1];
+	uint32_t			dwTextColor;
+	uint32_t 			dwNickColor;
 } CHAT_WINDOW_ENTRY;
 
 class CChatWindow
 {
+	friend class CGUI;
 public:
 	CChatWindow();
 	~CChatWindow();
 
-	void FilterInvalidChars(char* szString);
-	void AddToChatWindowBuffer(eChatMessageType eType, char* szString, char* szNick, uint32_t uTextColor, uint32_t uNickColor);
-//这个就是不需要GBK的缓存区
-	void AddToChatWindowBufferNoGBK(eChatMessageType eType, char* szString, char* szNick, uint32_t uTextColor, uint32_t uNickColor);
-//不需要GBK的调试输出
-	void AddDebugMessageNoGBK(char *szFormat, ...);
-
-	void Draw();
-
-	void AddChatMessage(char *szNick, uint32_t dwNickColor, char *szMessage);
-	void AddInfoMessage(char *szFormat, ...);
-	void AddDebugMessage(char *szFormat, ...);
+	void AddChatMessage(char* szNick, uint32_t dwNickColor, char* szMessage);
+	void AddInfoMessage(char* szFormat, ...);
+	void AddDebugMessage(char* szFormat, ...);
 	void AddClientMessage(uint32_t dwColor, char* szStr);
+//无GBK的缓存区
+	void AddToChatWindowBufferNoGBK(eChatMessageType eType, char* szString, char* szNick, uint32_t uTextColor, uint32_t uNickColor);
+//无GBK的调试输出
+	void AddDebugMessageNoGBK(char *szFormat, ...);
+protected:
+	void Render();
+	bool OnTouchEvent(int type, bool multi, int x, int y);
+
+public:
+	void RenderText(const char* u8Str, float posX, float posY, uint32_t dwColor);
+private:
+	void FilterInvalidChars(char* szString);
+	void AddToChatWindowBuffer(eChatMessageType eType, char* szString, char* szNick, 
+		uint32_t dwTextColor, uint32_t dwNickColor);
+	void PushBack(CHAT_WINDOW_ENTRY &entry);
 
 private:
-	std::list<CHAT_WINDOW_ENTRY> m_ChatWindowEntriesList;
+	float m_fChatPosX, m_fChatPosY;
+	float m_fChatSizeX, m_fChatSizeY;
 
-	uint32_t m_dwChatTextColor;
-	uint32_t m_dwChatInfoColor;
-	uint32_t m_dwChatDebugColor;
+	int m_iMaxMessages;
+	std::list<CHAT_WINDOW_ENTRY> m_ChatWindowEntries;
+
+	uint32_t m_dwTextColor;
+	uint32_t m_dwInfoColor;
+	uint32_t m_dwDebugColor;
 };

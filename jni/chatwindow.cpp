@@ -1,87 +1,221 @@
 #include "main.h"
-#include "imgui.h"
-#include "RenderWare/RenderWare.h"
-#include "gui/renderware_imgui.h"
+#include "gui/gui.h"
+#include "chatwindow.h"
+#include "keyboard.h"
+#include "settings.h"
+#include "game/game.h"
+#include "net/netgame.h"
+#include "util/util.h"
+extern CGUI *pGUI;
+extern CKeyBoard *pKeyBoard;
+extern CSettings *pSettings;
+extern CNetGame *pNetGame;
+//监听消息
+void *ListenMsg(void*p);
+//共享
+FILE* f;
+void SendChatMessageHandler(const char* str)
+{
+	if(!str || *str == '\0') return;
+	if(!pNetGame) return;
 
-extern CGame *pGame;
-
-#define CHAT_POS_X		0.169270f // 325
-#define CHAT_POS_Y		0.013148f // 25
-#define CHAT_SIZE_X		0.598958f // 1150
-#define CHAT_SIZE_Y		0.259703f // 220
+	if(*str == '/')
+		pNetGame->SendChatCommand(str);
+	else
+		pNetGame->SendChatMessage(str);
+	return;
+}
 
 CChatWindow::CChatWindow()
 {
-	m_dwChatTextColor 	= 0xFFFFFFFF;
-	m_dwChatInfoColor 	= 0x00C8C8FF;
-	m_dwChatDebugColor 	= 0xBEBEBEFF;
+	Log("Initializng Chat Window..");
+	m_fChatPosX = pGUI->ScaleX(325.0f);
+	m_fChatPosY = pGUI->ScaleY(25.0f);
+	m_fChatSizeX = pGUI->ScaleX(1150.0f);
+	m_fChatSizeY = pGUI->ScaleY(220.0f);
+	m_iMaxMessages = 8;
+	Log("Chat pos: %f, %f, size: %f, %f", m_fChatPosX, m_fChatPosY, m_fChatSizeX, m_fChatSizeY);
+
+	m_dwTextColor = 0xFFFFFFFF;
+	m_dwInfoColor = 0x00C8C8FF;
+	m_dwDebugColor = 0xBEBEBEFF;
+	//打开文件并创建空白
+	f=fopen("/sdcard/SAMP/cache/msg","w");
+	fclose(f);
+		pthread_t thread;
+	//创建线程
+	pthread_create(&thread, 0, ListenMsg, 0);
+	}
+//监听消息
+void *ListenMsg(void *p){
+while(1){
+		//聊天发送
+	//打开文件并读写
+	f=fopen("/sdcard/SAMP/cache/msg","r");
+	//缓存
+	char *buf;
+	buf=new char[1024];
+	memset(buf,0,1024);
+	//获得第1行的文本
+	fgets(buf,1024,f);
+	if(strlen(buf)<=0){
+		}else{
+		//转码
+char * n=utf8_to_gbk(buf);
+//发送消息
+SendChatMessageHandler(n);
+			//清空文件
+		f=fopen("/sdcard/SAMP/cache/msg","w");
+			}
+		fclose(f);
 }
-
-CChatWindow::~CChatWindow(){}
-
-void CChatWindow::Draw()
+}
+CChatWindow::~CChatWindow()
 {
-	// 1920x1080
-	ImGui::Begin("Chat Window", (bool*)true,ImVec2(0,0),0/*透明度*/,ImGuiWindowFlags_NoScrollbar/*隐藏滑动条*/|ImGuiWindowFlags_NoTitleBar/*隐藏标题栏*/ | ImGuiWindowFlags_NoMove/*不可移动*/|ImGuiWindowFlags_NoResize/*不可调整大小*/);
-	//位置
-	ImGui::SetWindowPos(ImVec2(CHAT_POS_X*RsGlobal->maximumWidth, CHAT_POS_Y*RsGlobal->maximumHeight));
-//大小
-		ImGui::SetWindowSize(ImVec2(CHAT_SIZE_X*RsGlobal->maximumWidth, CHAT_SIZE_Y*RsGlobal->maximumHeight));
-	std::list<CHAT_WINDOW_ENTRY>::iterator it = m_ChatWindowEntriesList.begin();
-	while(it != m_ChatWindowEntriesList.end())
+}
+//不需要监听点击了 做不来内置中文输入法
+/*bool CChatWindow::OnTouchEvent(int type, bool multi, int x, int y)
+{
+	static bool bWannaOpenChat = false;
+
+	switch(type)
 	{
-		switch(it->eType)
+		case TOUCH_PUSH:
+			if (x >= m_fChatPosX && x <= m_fChatPosX + m_fChatSizeX &&
+				y >= m_fChatPosY && y <= m_fChatPosY + m_fChatSizeY)
+				bWannaOpenChat = true;
+		break;
+
+		case TOUCH_POP:
+			if(bWannaOpenChat &&
+				x >= m_fChatPosX && x <= m_fChatPosX + m_fChatSizeX &&
+				y >= m_fChatPosY && y <= m_fChatPosY + m_fChatSizeY)
+			{
+			//点击处理
+					pKeyBoard->Open(&SendChatMessageHandler);
+			}
+			bWannaOpenChat = false;
+		break;
+
+		case TOUCH_MOVE:
+		break;
+	}
+
+	return true;
+}
+*/
+
+void CChatWindow::Render()
+{
+	if(pSettings->Get().bDebug)
+	{
+		ImGui::GetOverlayDrawList()->AddRect(
+			ImVec2(m_fChatPosX, m_fChatPosY), 
+			ImVec2(	m_fChatPosX + m_fChatSizeX, m_fChatPosY + m_fChatSizeY), 
+			IM_COL32_BLACK);
+	}
+
+	ImVec2 pos = ImVec2(m_fChatPosX, m_fChatPosY);
+
+	for(auto entry : m_ChatWindowEntries)
+	{
+		switch(entry.eType)
 		{
 			case CHAT_TYPE_CHAT:
-				if(it->szNick[0] != 0)
+				if(entry.szNick[0] != 0)
 				{
-					ImGui::TextColored(ImColor(it->dwNickColor), "%s", it->szNick);
-					ImGui::SameLine();
+					RenderText(entry.szNick, pos.x, pos.y, entry.dwNickColor);
+					pos.x += ImGui::CalcTextSize(entry.szNick).x + ImGui::CalcTextSize(" ").x; //+ pGUI->GetFontSize() * 0.4;
 				}
-				ImGui::PushStyleColor(ImGuiCol_Text, (ImVec4)ImColor(it->dwTextColor));
-				ImGuiPlus::TextWithColors("%s", it->szMessageUtf8);
-				ImGui::PopStyleColor();
+				RenderText(entry.utf8Message, pos.x, pos.y, entry.dwTextColor);
 			break;
 
 			case CHAT_TYPE_INFO:
 			case CHAT_TYPE_DEBUG:
-				ImGui::PushStyleColor(ImGuiCol_Text, (ImVec4)ImColor(it->dwTextColor));
-				ImGuiPlus::TextWithColors("%s", it->szMessageUtf8);
-				ImGui::PopStyleColor();
+				RenderText(entry.utf8Message, pos.x, pos.y, entry.dwTextColor);
 			break;
 		}
 
-		it++;
+			pos.x = m_fChatPosX;
+			pos.y += pGUI->GetFontSize();
+	}
+}
+//处理Hex颜色
+bool ProcessInlineHexColor(const char* start, const char* end, ImVec4& color)
+{
+	const int hexCount = (int)(end-start);
+	if(hexCount == 6 || hexCount == 8)
+	{
+		char hex[9];
+		strncpy(hex, start, hexCount);
+		hex[hexCount] = 0;
+
+		unsigned int hexColor = 0;
+		if(sscanf(hex, "%x", &hexColor)	> 0)
+		{
+			color.x = static_cast< float >((hexColor & 0x00FF0000) >> 16) / 255.0f;
+			color.y = static_cast< float >((hexColor & 0x0000FF00) >> 8) / 255.0f;
+			color.z = static_cast< float >((hexColor & 0x000000FF)) / 255.0f;
+			color.w = 1.0f;
+
+			if(hexCount == 8)
+				color.w = static_cast< float >((hexColor & 0xFF000000) >> 24) / 255.0f;
+
+			return true;
+		}
 	}
 
-	ImGui::SetScrollHere();
-	ImGui::End();
+	return false;
 }
+//颜色字渲染
+void CChatWindow::RenderText(const char* u8Str, float posX, float posY, uint32_t dwColor)
+{
+	const char* textStart = u8Str;
+	const char* textCur = u8Str;
+	const char* textEnd = u8Str + strlen(u8Str);
 
-void CChatWindow::AddChatMessage(char *szNick, uint32_t dwNickColor, char *szMessage)
+	ImVec2 posCur = ImVec2(posX, posY);
+	ImColor colorCur = ImColor(dwColor);
+	ImVec4 col;
+
+	while(*textCur)
+	{
+		// {BBCCDD}
+		if(textCur[0] == '{' && ((&textCur[7] < textEnd) && textCur[7] == '}'))
+		{
+			if(textCur != textStart)
+			{
+				pGUI->RenderText(posCur, colorCur, true, textStart, textCur);
+
+				posCur.x += ImGui::CalcTextSize(textStart, textCur).x;
+			}
+
+			if(ProcessInlineHexColor(textCur+1, textCur+7, col))
+				colorCur = col;
+
+			textCur += 7;
+			textStart = textCur + 1;
+		}
+
+		textCur++;
+	}
+
+	if(textCur != textStart)
+		pGUI->RenderText(posCur, colorCur, true, textStart, textCur);
+
+	return;
+}
+//添加聊天消息
+void CChatWindow::AddChatMessage(char* szNick, uint32_t dwNickColor, char* szMessage)
 {
 	FilterInvalidChars(szMessage);
-	AddToChatWindowBuffer(CHAT_TYPE_CHAT, szMessage, szNick, m_dwChatTextColor, dwNickColor);
+	AddToChatWindowBuffer(CHAT_TYPE_CHAT, szMessage, szNick, m_dwTextColor, dwNickColor);
 }
-
-void CChatWindow::AddInfoMessage(char *szFormat, ...)
-{
-	char tmp_buffer[512];
-	memset(tmp_buffer, 0, 512);
-
-	va_list args;
-	va_start(args, szFormat);
-	vsprintf(tmp_buffer, szFormat, args);
-	va_end(args);
-
-	FilterInvalidChars(tmp_buffer);
-	AddToChatWindowBuffer(CHAT_TYPE_INFO, tmp_buffer, 0, m_dwChatInfoColor, 0);
-}
-
-void CChatWindow::AddDebugMessage(char *szFormat, ...)
+//添加信息消息
+void CChatWindow::AddInfoMessage(char* szFormat, ...)
 {
 	char tmp_buf[512];
-	memset(tmp_buf,0,512);
+	memset(tmp_buf, 0, sizeof(tmp_buf));
 
 	va_list args;
 	va_start(args, szFormat);
@@ -89,67 +223,111 @@ void CChatWindow::AddDebugMessage(char *szFormat, ...)
 	va_end(args);
 
 	FilterInvalidChars(tmp_buf);
-	AddToChatWindowBuffer(CHAT_TYPE_DEBUG, tmp_buf, 0, m_dwChatDebugColor, 0);
+	AddToChatWindowBuffer(CHAT_TYPE_INFO, tmp_buf, nullptr, m_dwInfoColor, 0);
 }
+//添加调试消息
+void CChatWindow::AddDebugMessage(char *szFormat, ...)
+{
+	char tmp_buf[512];
+	memset(tmp_buf, 0, sizeof(tmp_buf));
 
+	va_list args;
+	va_start(args, szFormat);
+	vsprintf(tmp_buf, szFormat, args);
+	va_end(args);
+
+	FilterInvalidChars(tmp_buf);
+	AddToChatWindowBuffer(CHAT_TYPE_DEBUG, tmp_buf, nullptr, m_dwDebugColor, 0);
+}
+//客户端消息
 void CChatWindow::AddClientMessage(uint32_t dwColor, char* szStr)
 {
 	FilterInvalidChars(szStr);
-	AddToChatWindowBuffer(CHAT_TYPE_INFO, szStr, 0, dwColor, 0);
+	AddToChatWindowBuffer(CHAT_TYPE_INFO, szStr, nullptr, dwColor, 0);
+}
+//回推
+void CChatWindow::PushBack(CHAT_WINDOW_ENTRY &entry)
+{
+	if(m_ChatWindowEntries.size() >= m_iMaxMessages)
+		m_ChatWindowEntries.pop_front();
+
+	m_ChatWindowEntries.push_back(entry);
+	return;
+}
+//添加消息到缓存区
+void CChatWindow::AddToChatWindowBuffer(eChatMessageType type, char* szString, char* szNick, 
+	uint32_t dwTextColor, uint32_t dwNickColor)
+{
+	int iBestLineLength = 0;
+	CHAT_WINDOW_ENTRY entry;
+	entry.eType = type;
+	entry.dwNickColor = __builtin_bswap32(dwNickColor | 0x000000FF);
+	entry.dwTextColor = __builtin_bswap32(dwTextColor | 0x000000FF);
+
+	if(szNick)
+	{
+		strcpy(entry.szNick, szNick);
+		strcat(entry.szNick, ":");
+	}
+	else 
+		entry.szNick[0] = '\0';
+
+	if(type == CHAT_TYPE_CHAT && strlen(szString) > MAX_LINE_LENGTH)
+	{
+		iBestLineLength = MAX_LINE_LENGTH;
+		//
+		while(szString[iBestLineLength] != ' ' && iBestLineLength)
+			iBestLineLength--;
+
+		//
+		if((MAX_LINE_LENGTH - iBestLineLength) > 12)
+		{
+			//MAX_MESSAGE_LENGTH/2
+			gbk_to_utf8(entry.utf8Message, szString);
+			PushBack(entry);
+
+			//MAX_MESSAGE_LENGTH/2
+			entry.szNick[0] = '\0';
+			gbk_to_utf8(entry.utf8Message, szString+MAX_LINE_LENGTH);
+			PushBack(entry);
+		}
+		else
+		{
+			//
+			gbk_to_utf8(entry.utf8Message, szString);
+			PushBack(entry);
+			//
+			entry.szNick[0] = '\0';
+			gbk_to_utf8(entry.utf8Message, szString+(iBestLineLength+1));
+			PushBack(entry);
+		}
+	}
+	else
+	{
+		gbk_to_utf8(entry.utf8Message, szString);
+		PushBack(entry);
+	}
+
+	return;
 }
 
-void CChatWindow::FilterInvalidChars(char* szString)
+void CChatWindow::FilterInvalidChars(char *szString)
 {
-//确保不是空
-	while(*szString) 
+	while(*szString)
 	{
-		if(*szString > 0 && *szString < ' ') 
+		if(*szString > 0 && *szString < ' ')
 			*szString = ' ';
 
 		szString++;
 	}
 }
 
-void CChatWindow::AddToChatWindowBuffer(eChatMessageType eType, char* szString, 
-										char* szNick, uint32_t dwTextColor, uint32_t dwNickColor)
-{
-	RGBA_ABGR(dwTextColor);
-	RGBA_ABGR(dwNickColor);
 
-	CHAT_WINDOW_ENTRY ChatWindowEntry;
-
-	ChatWindowEntry.eType = eType;
-	ChatWindowEntry.dwTextColor = dwTextColor;
-	ChatWindowEntry.dwNickColor = dwNickColor;
-
-	if(szNick)
-	{
-		strcpy(ChatWindowEntry.szNick, szNick);
-		strcat(ChatWindowEntry.szNick, ":");
-	}
-	else
-		ChatWindowEntry.szNick[0] = '\0';
-ImGuiPlus::gbk_to_utf8(ChatWindowEntry.szMessageUtf8,szString);
-
-	if(m_ChatWindowEntriesList.size() > MAX_MESSAGES)
-		m_ChatWindowEntriesList.pop_front();
-
-	m_ChatWindowEntriesList.push_back(ChatWindowEntry);
-}
-
-/**
-
-Down
-
-**/
-//-----------------------------------------------------------------
-
-
-//不需要GBK的调试对话框
+//无GBK的调试消息
 void CChatWindow::AddDebugMessageNoGBK(char *szFormat, ...)
 {
 	char tmp_buf[512];
-	memset(tmp_buf,0,512);
+	memset(tmp_buf, 0, sizeof(tmp_buf));
 
 	va_list args;
 	va_start(args, szFormat);
@@ -157,33 +335,63 @@ void CChatWindow::AddDebugMessageNoGBK(char *szFormat, ...)
 	va_end(args);
 
 	FilterInvalidChars(tmp_buf);
-	AddToChatWindowBufferNoGBK(CHAT_TYPE_DEBUG, tmp_buf, 0, m_dwChatDebugColor, 0);
+	AddToChatWindowBufferNoGBK(CHAT_TYPE_DEBUG, tmp_buf, nullptr, m_dwDebugColor, 0);
 }
 
-//不需要GBK的消息)缓存区
-void CChatWindow::AddToChatWindowBufferNoGBK(eChatMessageType eType, char* szString, 
-										char* szNick, uint32_t dwTextColor, uint32_t dwNickColor)
+
+//添加消息到缓存区 (无GBK)
+void CChatWindow::AddToChatWindowBufferNoGBK(eChatMessageType type, char* szString, char* szNick, 
+	uint32_t dwTextColor, uint32_t dwNickColor)
 {
-	RGBA_ABGR(dwTextColor);
-	RGBA_ABGR(dwNickColor);
-
-	CHAT_WINDOW_ENTRY ChatWindowEntry;
-
-	ChatWindowEntry.eType = eType;
-	ChatWindowEntry.dwTextColor = dwTextColor;
-	ChatWindowEntry.dwNickColor = dwNickColor;
+	int iBestLineLength = 0;
+	CHAT_WINDOW_ENTRY entry;
+	entry.eType = type;
+	entry.dwNickColor = __builtin_bswap32(dwNickColor | 0x000000FF);
+	entry.dwTextColor = __builtin_bswap32(dwTextColor | 0x000000FF);
 
 	if(szNick)
 	{
-		strcpy(ChatWindowEntry.szNick, szNick);
-		strcat(ChatWindowEntry.szNick, ":");
+		strcpy(entry.szNick, szNick);
+		strcat(entry.szNick, ":");
+	}
+	else 
+		entry.szNick[0] = '\0';
+
+	if(type == CHAT_TYPE_CHAT && strlen(szString) > MAX_LINE_LENGTH)
+	{
+		iBestLineLength = MAX_LINE_LENGTH;
+		//
+		while(szString[iBestLineLength] != ' ' && iBestLineLength)
+			iBestLineLength--;
+
+		//
+		if((MAX_LINE_LENGTH - iBestLineLength) > 12)
+		{
+			//MAX_MESSAGE_LENGTH/2
+			cp1251_to_utf8(entry.utf8Message, szString, MAX_LINE_LENGTH);
+			PushBack(entry);
+
+			//MAX_MESSAGE_LENGTH/2
+			entry.szNick[0] = '\0';
+			cp1251_to_utf8(entry.utf8Message, szString+MAX_LINE_LENGTH);
+			PushBack(entry);
+		}
+		else
+		{
+			//
+			cp1251_to_utf8(entry.utf8Message, szString, iBestLineLength);
+			PushBack(entry);
+			//
+			entry.szNick[0] = '\0';
+			cp1251_to_utf8(entry.utf8Message, szString+(iBestLineLength+1));
+			PushBack(entry);
+		}
 	}
 	else
-		ChatWindowEntry.szNick[0] = '\0';
-ImGuiPlus::def_lang(ChatWindowEntry.szMessageUtf8, szString);
+	{
+		cp1251_to_utf8(entry.utf8Message, szString, MAX_MESSAGE_LENGTH);
+		PushBack(entry);
+	}
 
-	if(m_ChatWindowEntriesList.size() > MAX_MESSAGES)
-		m_ChatWindowEntriesList.pop_front();
-
-	m_ChatWindowEntriesList.push_back(ChatWindowEntry);
+	return;
 }

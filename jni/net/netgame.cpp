@@ -1,20 +1,36 @@
-#include "main.h"
-#include "game/util.h"
-#include "game/keystuff.h"
-#include "imgui.h"
-#include "RenderWare/RenderWare.h"
-#include "gui/renderware_imgui.h"
+#include "../main.h"
+#include "../game/game.h"
+#include "netgame.h"
+
+#include "chatwindow.h"
+#include "spawnscreen.h"
+
+#define NETGAME_VERSION 4057
+#define AUTH_BS "15121F6F18550C00AC4B4F8A167D0379BB0ACA99043"
 
 extern CGame *pGame;
-extern CNetGame *pNetGame;
+extern CSpawnScreen *pSpawnScreen;
 extern CChatWindow *pChatWindow;
-
-#define AUTH_BS "1031CA8429843C9B8C178B65F3C73602578440D17F8"
 
 int iVehiclePoolProcessFlag = 0;
 int iPickupPoolProcessFlag = 0;
-//最后一个参数用于获取设置的玩家名
-CNetGame::CNetGame(char *szHostOrIp, int iPort, char* szPlayerName, char *szPass,char* pName)
+
+void RegisterRPCs(RakClientInterface* pRakClient);
+void UnRegisterRPCs(RakClientInterface* pRakClient);
+void RegisterScriptRPCs(RakClientInterface* pRakClient);
+void UnRegisterScriptRPCs(RakClientInterface* pRakClient);
+
+unsigned char GetPacketID(Packet *p)
+{
+	if(p == 0) return 255;
+
+	if ((unsigned char)p->data[0] == ID_TIMESTAMP)
+		return (unsigned char) p->data[sizeof(unsigned char) + sizeof(unsigned long)];
+	else
+		return (unsigned char) p->data[0];
+}
+
+CNetGame::CNetGame(const char* szHostOrIp, int iPort, const char* szPlayerName, const char* szPass)
 {
 	strcpy(m_szHostName, "San Andreas Multiplayer");
 	strncpy(m_szHostOrIp, szHostOrIp, sizeof(m_szHostOrIp));
@@ -22,98 +38,91 @@ CNetGame::CNetGame(char *szHostOrIp, int iPort, char* szPlayerName, char *szPass
 
 	m_pPlayerPool = new CPlayerPool();
 	m_pPlayerPool->SetLocalPlayerName(szPlayerName);
-
-	m_pVehiclePool 	= new CVehiclePool();
-	m_pObjectPool	= new CObjectPool();
-	m_pPickupPool	= new CPickupPool();
+	
+	m_pVehiclePool = new CVehiclePool();
+	m_pObjectPool = new CObjectPool();
+	m_pPickupPool = new CPickupPool();
 	m_pGangZonePool = new CGangZonePool();
+	m_pLabelPool = new CText3DLabelsPool();
 
 	m_pRakClient = RakNetworkFactory::GetRakClientInterface();
-
 	RegisterRPCs(m_pRakClient);
 	RegisterScriptRPCs(m_pRakClient);
 	m_pRakClient->SetPassword(szPass);
 
-	m_pRakClient->SetMTUSize(1492);
-
 	m_dwLastConnectAttempt = GetTickCount();
-	m_iGameState = GAMESTATE_WAIT_CONNECT;
+	m_iGameState = 	GAMESTATE_WAIT_CONNECT;
 
-	m_byteWorldTime = 12;
+	m_iSpawnsAvailable = 0;
+	m_bHoldTime = true;
 	m_byteWorldMinute = 0;
-	m_byteWeather = 10;
-	m_byteHoldTime = 1;
+	m_byteWorldTime = 12;
+	m_byteWeather =	10;
+	m_fGravity = (float)0.008000000;
+	m_bUseCJWalk = false;
+	m_bDisableEnterExits = false;
+	m_fNameTagDrawDistance = 60.0f;
+	m_bZoneNames = false;
+	m_bInstagib = false;
+	m_iDeathDropMoney = 0;
+	m_bNameTagLOS = false;
 
-	for(int i = 0; i < 32; i++) m_dwMapIcon[i] = 0;
+	for(int i=0; i<100; i++)
+		m_dwMapIcons[i] = 0;
 
 	pGame->EnableClock(false);
 	pGame->EnableZoneNames(false);
-
-	if(pChatWindow) 
-		pChatWindow->AddDebugMessageNoGBK("[FFFFFF]SA-MP [B9C9BF]0.3.7.[FF00FF]47 [FFFFFF]Started");
-		pChatWindow->AddDebugMessageNoGBK("[66ccff]版本号:8");
-		pChatWindow->AddDebugMessageNoGBK("%s",pName);
-		FILE* f;
-	//打开文件并创建空白
-	f=fopen("/sdcard/SAMP/cache/msg","w");
-	fclose(f);
+	if(pChatWindow) pChatWindow->AddDebugMessageNoGBK("{FFFFFF}SA-MP {B9C9BF}" SAMP_VERSION " {FFFFFF}Started");
 }
 
 CNetGame::~CNetGame()
 {
 	m_pRakClient->Disconnect(0);
 	UnRegisterRPCs(m_pRakClient);
-	UnRegisterScriptRPCs(m_pRakClient);	// Unregister server-side scripting RPCs.
+	UnRegisterScriptRPCs(m_pRakClient);
 	RakNetworkFactory::DestroyRakClientInterface(m_pRakClient);
-}
 
-void CNetGame::ShutdownForGameModeRestart()
-{
-	m_byteWorldTime = 12;
-	m_byteWorldMinute = 0;
-	m_byteWeather = 10;
-	m_byteHoldTime = 1;
-	pGame->EnableClock(1);
-
-	for (PLAYERID playerId = 0; playerId < MAX_PLAYERS; playerId++)
+	if(m_pPlayerPool) 
 	{
-		CRemotePlayer *pPlayer = m_pPlayerPool->GetAt(playerId);
-		if(pPlayer)
-		{
-			pPlayer->ResetAllSyncAttributes();
-		}
+		delete m_pPlayerPool;
+		m_pPlayerPool = nullptr;
 	}
 
-	CLocalPlayer *pLocalPlayer = m_pPlayerPool->GetLocalPlayer();
-	if(pLocalPlayer)
+	if(m_pVehiclePool)
 	{
-		pLocalPlayer->ResetAllSyncAttributes();
+		delete m_pVehiclePool;
+		m_pVehiclePool = nullptr;
 	}
 
-	m_iGameState = GAMESTATE_RESTARTING;
+	if(m_pPickupPool)
+	{
+		delete m_pPickupPool;
+		m_pPickupPool = nullptr;
+	}
 
-	m_pPlayerPool->DeactivateAll();
-	m_pPlayerPool->Process();
+	if(m_pGangZonePool)
+	{
+		delete m_pGangZonePool;
+		m_pGangZonePool = nullptr;
+	}
 
-	ResetVehiclePool();
-
-	pGame->EnableZoneNames(false);
-
-	GameResetRadarColors();
+	if(m_pLabelPool)
+	{
+		delete m_pLabelPool;
+		m_pLabelPool = nullptr;
+	}
 }
 
 void CNetGame::Process()
 {
 	UpdateNetwork();
-		pGame->SetWorldTime(m_byteWorldTime, m_byteWorldMinute);
 
-	if(m_byteHoldTime) 
+	if(m_bHoldTime)
 		pGame->SetWorldTime(m_byteWorldTime, m_byteWorldMinute);
-
-	pGame->SetWorldWeather(m_byteWeather);
 
 	if(GetGameState() == GAMESTATE_CONNECTED)
 	{
+		// pool process
 		if(m_pPlayerPool) m_pPlayerPool->Process();
 
 		if(m_pVehiclePool && iVehiclePoolProcessFlag > 5)
@@ -121,17 +130,14 @@ void CNetGame::Process()
 			m_pVehiclePool->Process();
 			iVehiclePoolProcessFlag = 0;
 		}
-		else
-			iVehiclePoolProcessFlag++;
 
-		if(m_pPickupPool && iPickupPoolProcessFlag > 5)
+		if(m_pPickupPool && iPickupPoolProcessFlag > 5) 
 		{
 			m_pPickupPool->Process();
 			iPickupPoolProcessFlag = 0;
 		}
 		else
 			++iPickupPoolProcessFlag;
-
 	}
 	else
 	{
@@ -141,74 +147,76 @@ void CNetGame::Process()
 		if(pPlayer && pCamera)
 		{
 			if(pPlayer->IsInVehicle())
-				pPlayer->RemoveFromVehicleAndPutAt(1133.05f, -2038.40f, 69.10f);
+				pPlayer->RemoveFromVehicleAndPutAt(1093.4f, -2036.5f, 82.7106f);
 			else
-				pPlayer->TeleportTo(1133.05f, -2038.40f, 69.10f);
+				pPlayer->TeleportTo(1093.4f, -2036.5f, 82.7106f);
 
 			pCamera->SetPosition(1093.0f, -2036.0f, 90.0f, 0.0f, 0.0f, 0.0f);
-            pCamera->LookAtPoint(384.0f, -1557.0f, 20.0f, 2);
-			pGame->DisplayHUD(false);
+			pCamera->LookAtPoint(384.0f, -1557.0f, 20.0f, 2);
+			pGame->SetWorldWeather(m_byteWeather);
+			pGame->DisplayWidgets(false);
 		}
 	}
 
-	if(GetGameState() == GAMESTATE_WAIT_CONNECT && (GetTickCount() - m_dwLastConnectAttempt) > 3000)
+	if(GetGameState() == GAMESTATE_WAIT_CONNECT &&
+		(GetTickCount() - m_dwLastConnectAttempt) > 3000)
 	{
-		LOGI("Connecting to %s:%d...", m_szHostOrIp, m_iPort);
-		if (pChatWindow) pChatWindow->AddDebugMessageNoGBK("正在连接至 %s:%d...", m_szHostOrIp, m_iPort);
+		if(pChatWindow) pChatWindow->AddDebugMessageNoGBK("已连接至 %s:%d...", m_szHostOrIp, m_iPort);
 		m_pRakClient->Connect(m_szHostOrIp, m_iPort, 0, 0, 5);
 		m_dwLastConnectAttempt = GetTickCount();
+		SetGameState(GAMESTATE_CONNECTING);
 	}
 }
 
 void CNetGame::UpdateNetwork()
 {
+	Packet* pkt = nullptr;
 	unsigned char packetIdentifier;
-	Packet *pkt;
 
 	while(pkt = m_pRakClient->Receive())
 	{
-		if ( ( unsigned char ) pkt->data[ 0 ] == ID_TIMESTAMP )
-		{
-			if ( pkt->length > sizeof( unsigned char ) + sizeof( unsigned int ) )
-				packetIdentifier = ( unsigned char ) pkt->data[ sizeof( unsigned char ) + sizeof( unsigned int ) ];
-			else
-				return;
-		}
-		else
-			packetIdentifier = ( unsigned char ) pkt->data[ 0 ];
+		packetIdentifier = GetPacketID(pkt);
 
 		switch(packetIdentifier)
 		{
-
-			case ID_DISCONNECTION_NOTIFICATION:
-			Packet_DisconnectionNotification(pkt);
-			break;
-
-			case ID_CONNECTION_BANNED:
-			Packet_ConnectionBanned(pkt);
+			case ID_AUTH_KEY:
+			Log("Incoming packet: ID_AUTH_KEY");
+			Packet_AuthKey(pkt);
 			break;
 
 			case ID_CONNECTION_ATTEMPT_FAILED:
-			Packet_ConnectAttemptFailed(pkt);
+			pChatWindow->AddDebugMessageNoGBK("服务器未回应数据包，正在重新连接...");
+			SetGameState(GAMESTATE_WAIT_CONNECT);
 			break;
 
 			case ID_NO_FREE_INCOMING_CONNECTIONS:
-			Packet_NoFreeIncomingConnections(pkt);
+			pChatWindow->AddDebugMessageNoGBK("服务器已满，正在重新连接...");
+			SetGameState(GAMESTATE_WAIT_CONNECT);
+			break;
+
+			case ID_DISCONNECTION_NOTIFICATION:
+			Packet_DisconnectionNotification(pkt);
 			break;
 
 			case ID_CONNECTION_LOST:
 			Packet_ConnectionLost(pkt);
 			break;
 
-			case ID_INVALID_PASSWORD:
-			Packet_InvalidPassword(pkt);
-
-			case ID_AUTH_KEY:
-			Packet_AuthKey(pkt);
-			break;
-
 			case ID_CONNECTION_REQUEST_ACCEPTED:
 			Packet_ConnectionSucceeded(pkt);
+			break;
+
+			case ID_FAILED_INITIALIZE_ENCRIPTION:
+			pChatWindow->AddDebugMessageNoGBK("无法初始化加密!");
+			break;
+
+			case ID_CONNECTION_BANNED:
+			pChatWindow->AddDebugMessageNoGBK("你已被封禁至该服务器!");
+			break;
+
+			case ID_INVALID_PASSWORD:
+			pChatWindow->AddDebugMessageNoGBK("服务器密码错误!");
+			m_pRakClient->Disconnect(0);
 			break;
 
 			case ID_PLAYER_SYNC:
@@ -223,41 +231,265 @@ void CNetGame::UpdateNetwork()
 			Packet_PassengerSync(pkt);
 			break;
 
-			// 0.3.7
 			case ID_MARKERS_SYNC:
-			Packet_MarkerSync(pkt);
+			Packet_MarkersSync(pkt);
 			break;
 		}
 
 		m_pRakClient->DeallocatePacket(pkt);
-		//武器
-/*			int (*GiveWeapon)(uint id,bool b);
-    *(int **)(&GiveWeapon) = (int*)(g_libGTASA+0x43429D);
-    	    (*GiveWeapon)(1,1);*/
-		//聊天发送
-		FILE* f;
-	//打开文件并读写
-	f=fopen("/sdcard/SAMP/cache/msg","r");
-	//缓存
-	char *buf;
-	buf=new char[1024];
-	memset(buf,0,1024);
-	//获得第1行的文本
-	fgets(buf,1024,f);
-	if(strlen(buf)<=0){
-		}else{
-		//转码
-char * n=ImGuiPlus::utf8_to_gbk(buf);
-//发送消息
-pGame->SendMC(n);
-			//清空文件
-		f=fopen("/sdcard/SAMP/cache/msg","w");
-			}
-		fclose(f);
 	}
 }
-//玩家同步
-void CNetGame::Packet_PlayerSync(Packet *pkt)
+
+void CNetGame::ResetVehiclePool()
+{
+	Log("ResetVehiclePool");
+	if(m_pVehiclePool)
+		delete m_pVehiclePool;
+
+	m_pVehiclePool = new CVehiclePool();
+}
+
+void CNetGame::ResetObjectPool()
+{
+	Log("ResetObjectPool");
+	if(m_pObjectPool)
+		delete m_pObjectPool;
+
+	m_pObjectPool = new CObjectPool();
+}
+
+void CNetGame::ResetPickupPool()
+{
+	Log("ResetPickupPool");
+	if(m_pPickupPool)
+		delete m_pPickupPool;
+
+	m_pPickupPool = new CPickupPool();
+}
+
+void CNetGame::ResetGangZonePool()
+{
+	Log("ResetGangZonePool");
+	if(m_pGangZonePool)
+		delete m_pGangZonePool;
+
+	m_pGangZonePool = new CGangZonePool();
+}
+
+void CNetGame::ResetLabelPool()
+{
+	Log("ResetLabelPool");
+	if(m_pLabelPool)
+		delete m_pLabelPool;
+
+	m_pLabelPool = new CText3DLabelsPool();
+}
+
+void CNetGame::ShutDownForGameRestart()
+{
+	for(PLAYERID playerId = 0; playerId < MAX_PLAYERS; playerId++)
+	{
+		CRemotePlayer* pPlayer = m_pPlayerPool->GetAt(playerId);
+		if(pPlayer)
+		{
+			//pPlayer->SetTeam(NO_TEAM);
+			//pPlayer->ResetAllSyncAttributes();
+		}
+	}
+
+	CLocalPlayer *pLocalPlayer = m_pPlayerPool->GetLocalPlayer();
+	if(pLocalPlayer)
+	{
+		pLocalPlayer->ResetAllSyncAttributes();
+		pLocalPlayer->ToggleSpectating(false);
+	}
+
+	m_iGameState = GAMESTATE_RESTARTING;
+
+	//m_pPlayerPool->DeactivateAll();
+	m_pPlayerPool->Process();
+
+	ResetVehiclePool();
+	ResetObjectPool();
+	ResetPickupPool();
+	ResetGangZonePool();
+	ResetLabelPool();
+
+	m_bDisableEnterExits = false;
+	m_fNameTagDrawDistance = 60.0f;
+	m_byteWorldTime = 12;
+	m_byteWorldMinute = 0;
+	m_byteWeather = 1;
+	m_bHoldTime = true;
+	m_bNameTagLOS = true;
+	m_bUseCJWalk = false;
+	m_fGravity = 0.008f;
+	m_iDeathDropMoney = 0;
+
+	if(pSpawnScreen) pSpawnScreen->Show(false);
+
+	CPlayerPed *pPlayerPed = pGame->FindPlayerPed();
+	if(pPlayerPed)
+	{
+		pPlayerPed->SetInterior(0);
+		//pPlayerPed->SetDead();
+		pPlayerPed->SetArmour(0.0f);
+	}
+
+	pGame->ToggleCJWalk(false);
+	pGame->ResetLocalMoney();
+	pGame->EnableZoneNames(false);
+	m_bZoneNames = false;
+	GameResetRadarColors();
+	pGame->SetGravity(m_fGravity);
+	pGame->EnableClock(false);
+}
+
+void CNetGame::SendChatMessage(const char* szMsg)
+{
+	if (GetGameState() != GAMESTATE_CONNECTED) return;
+
+	RakNet::BitStream bsSend;
+	uint8_t byteTextLen = strlen(szMsg);
+
+	bsSend.Write(byteTextLen);
+	bsSend.Write(szMsg, byteTextLen);
+
+	m_pRakClient->RPC(&RPC_Chat,&bsSend,HIGH_PRIORITY,RELIABLE,0,false, UNASSIGNED_NETWORK_ID, NULL);
+}
+
+void CNetGame::SendChatCommand(const char* szCommand)
+{
+	if (GetGameState() != GAMESTATE_CONNECTED) return;
+
+	RakNet::BitStream bsParams;
+	int iStrlen = strlen(szCommand);
+
+	bsParams.Write(iStrlen);
+	bsParams.Write(szCommand, iStrlen);
+	m_pRakClient->RPC(&RPC_ServerCommand, &bsParams, HIGH_PRIORITY, RELIABLE, 0, false, UNASSIGNED_NETWORK_ID, NULL);
+}
+
+void CNetGame::SendDialogResponse(uint16_t wDialogID, uint8_t byteButtonID, uint16_t wListBoxItem, char* szInput)
+{
+	uint8_t respLen = strlen(szInput);
+
+	RakNet::BitStream bsSend;
+	bsSend.Write(wDialogID);
+	bsSend.Write(byteButtonID);
+	bsSend.Write(wListBoxItem);
+	bsSend.Write(respLen);
+	bsSend.Write(szInput, respLen);
+	m_pRakClient->RPC(&RPC_DialogResponse, &bsSend, HIGH_PRIORITY, RELIABLE_ORDERED, 0, false, UNASSIGNED_NETWORK_ID, NULL);
+}
+
+void CNetGame::SetMapIcon(uint8_t byteIndex, float fX, float fY, float fZ, uint8_t byteIcon, int iColor, int style)
+{
+	if(byteIndex >= 100) return;
+	if(m_dwMapIcons[byteIndex]) DisableMapIcon(byteIndex);
+
+	m_dwMapIcons[byteIndex] = pGame->CreateRadarMarkerIcon(byteIcon, fX, fY, fZ, iColor, style);
+}
+
+void CNetGame::DisableMapIcon(uint8_t byteIndex)
+{
+	if(byteIndex >= 100) return;
+	ScriptCommand(&disable_marker, m_dwMapIcons[byteIndex]);
+	m_dwMapIcons[byteIndex] = 0;
+}
+
+void gen_auth_key(char buf[260], char* auth_in);
+void CNetGame::Packet_AuthKey(Packet* pkt)
+{
+	RakNet::BitStream bsAuth((unsigned char *)pkt->data, pkt->length, false);
+
+	uint8_t byteAuthLen;
+	char szAuth[260];
+
+	bsAuth.IgnoreBits(8);
+	bsAuth.Read(byteAuthLen);
+	bsAuth.Read(szAuth, byteAuthLen);
+	szAuth[byteAuthLen] = '\0';
+
+	char szAuthKey[260];
+	gen_auth_key(szAuthKey, szAuth);
+
+	RakNet::BitStream bsKey;
+	uint8_t byteAuthKeyLen = (uint8_t)strlen(szAuthKey);
+
+	bsKey.Write((uint8_t)ID_AUTH_KEY);
+	bsKey.Write((uint8_t)byteAuthKeyLen);
+	bsKey.Write(szAuthKey, byteAuthKeyLen);
+	m_pRakClient->Send(&bsKey, SYSTEM_PRIORITY, RELIABLE, 0);
+
+	Log("[AUTH] %s -> %s", szAuth, szAuthKey);
+}
+
+void CNetGame::Packet_DisconnectionNotification(Packet* pkt)
+{
+	if(pChatWindow)
+		pChatWindow->AddDebugMessageNoGBK("服务器关闭了连接");
+	m_pRakClient->Disconnect(2000);
+}
+
+void CNetGame::Packet_ConnectionLost(Packet* pkt)
+{
+	if(m_pRakClient) m_pRakClient->Disconnect(0);
+
+	if(pChatWindow)
+		pChatWindow->AddDebugMessageNoGBK("和服务器走丢了，正在重新连接...");
+
+	ShutDownForGameRestart();
+
+	for(PLAYERID playerId = 0; playerId < MAX_PLAYERS; playerId++)
+	{
+		CRemotePlayer *pPlayer = m_pPlayerPool->GetAt(playerId);
+		if(pPlayer) m_pPlayerPool->Delete(playerId, 0);
+	}
+
+	SetGameState(GAMESTATE_WAIT_CONNECT);
+}
+
+void CNetGame::Packet_ConnectionSucceeded(Packet* pkt)
+{
+	if(pChatWindow)
+		pChatWindow->AddDebugMessageNoGBK("已连接. 正在加入游戏...");
+	SetGameState(GAMESTATE_AWAIT_JOIN);
+
+	RakNet::BitStream bsSuccAuth((unsigned char *)pkt->data, pkt->length, false);
+	PLAYERID MyPlayerID;
+	unsigned int uiChallenge;
+
+	bsSuccAuth.IgnoreBits(8); // ID_CONNECTION_REQUEST_ACCEPTED
+	bsSuccAuth.IgnoreBits(32); // binaryAddress
+	bsSuccAuth.IgnoreBits(16); // port
+	bsSuccAuth.Read(MyPlayerID);
+	bsSuccAuth.Read(uiChallenge);
+
+	m_pPlayerPool->SetLocalPlayerID(MyPlayerID);
+
+	int iVersion = NETGAME_VERSION;
+	char byteMod = 0x01;
+	unsigned int uiClientChallengeResponse = uiChallenge ^ iVersion;
+
+	char byteAuthBSLen = (char)strlen(AUTH_BS);
+	char byteNameLen = (char)strlen(m_pPlayerPool->GetLocalPlayerName());
+	char byteClientverLen = (char)strlen(SAMP_VERSION);
+
+	RakNet::BitStream bsSend;
+	bsSend.Write(iVersion);
+	bsSend.Write(byteMod);
+	bsSend.Write(byteNameLen);
+	bsSend.Write(m_pPlayerPool->GetLocalPlayerName(), byteNameLen);
+	bsSend.Write(uiClientChallengeResponse);
+	bsSend.Write(byteAuthBSLen);
+	bsSend.Write(AUTH_BS, byteAuthBSLen);
+	bsSend.Write(byteClientverLen);
+	bsSend.Write(SAMP_VERSION, byteClientverLen);
+	m_pRakClient->RPC(&RPC_ClientJoin, &bsSend, HIGH_PRIORITY, RELIABLE, 0, false, UNASSIGNED_NETWORK_ID, NULL);
+}
+
+void CNetGame::Packet_PlayerSync(Packet* pkt)
 {
 	CRemotePlayer * pPlayer;
 	RakNet::BitStream bsPlayerSync((unsigned char *)pkt->data, pkt->length, false);
@@ -267,6 +499,8 @@ void CNetGame::Packet_PlayerSync(Packet *pkt)
 
 	bool bHasLR,bHasUD;
 	bool bHasVehicleSurfingInfo;
+
+	if(GetGameState() != GAMESTATE_CONNECTED) return;
 
 	memset(&ofSync, 0, sizeof(ONFOOT_SYNC_DATA));
 
@@ -285,22 +519,17 @@ void CNetGame::Packet_PlayerSync(Packet *pkt)
 	bsPlayerSync.Read(ofSync.wKeys);
 
 	// VECTOR POS
-	//向量位置
 	bsPlayerSync.Read((char*)&ofSync.vecPos,sizeof(VECTOR));
 
 	// QUATERNION
-	//四元数
-	// ------  что за дерьмо ------
 	float tw, tx, ty, tz;
 	bsPlayerSync.ReadNormQuat(tw, tx, ty, tz);
-	ofSync.Quat.W = tw;
-	ofSync.Quat.X = tx;
-	ofSync.Quat.Y = ty;
-	ofSync.Quat.Z = tz;
-	// ----------------------------
+	ofSync.quat.w = tw;
+	ofSync.quat.x = tx;
+	ofSync.quat.y = ty;
+	ofSync.quat.z = tz;
 
 	// HEALTH/ARMOUR (COMPRESSED INTO 1 BYTE)
-	//血量与防弹衣同步
 	uint8_t byteHealthArmour;
 	uint8_t byteArmTemp=0,byteHlTemp=0;
 
@@ -316,24 +545,18 @@ void CNetGame::Packet_PlayerSync(Packet *pkt)
 	else if(byteHlTemp == 0) ofSync.byteHealth = 0;
 	else ofSync.byteHealth = byteHlTemp * 7;
 
-    // CURRENT WEAPON
-    //玩家当前武器
+	// CURRENT WEAPON
     bsPlayerSync.Read(ofSync.byteCurrentWeapon);
     // SPECIAL ACTION
-    //特殊行动
     bsPlayerSync.Read(ofSync.byteSpecialAction);
-    
+
     // READ MOVESPEED VECTORS
-    //读取移动速度矢量
-    // чому это говно не хочет работать?
     bsPlayerSync.ReadVector(tx, ty, tz);
     ofSync.vecMoveSpeed.X = tx;
     ofSync.vecMoveSpeed.Y = ty;
     ofSync.vecMoveSpeed.Z = tz;
-    // ---------------------
 
     bsPlayerSync.Read(bHasVehicleSurfingInfo);
-
     if (bHasVehicleSurfingInfo) 
     {
         bsPlayerSync.Read(ofSync.wSurfInfo);
@@ -348,58 +571,55 @@ void CNetGame::Packet_PlayerSync(Packet *pkt)
     {
     	pPlayer = m_pPlayerPool->GetAt(playerId);
     	if(pPlayer)
-    		pPlayer->StoreOnFootFullSyncData(&ofSync);
+    		pPlayer->StoreOnFootFullSyncData(&ofSync, 0);
     }
 }
-//载具同步
-void CNetGame::Packet_VehicleSync(Packet *p)
+
+void CNetGame::Packet_VehicleSync(Packet* pkt)
 {
 	CRemotePlayer *pPlayer;
-	RakNet::BitStream bsSync((unsigned char *)p->data, p->length, false);
-	uint8_t	bytePacketID = 0;
+	RakNet::BitStream bsSync((unsigned char *)pkt->data, pkt->length, false);
+	uint8_t bytePacketID = 0;
 	PLAYERID playerId;
-	INCAR_SYNC_DATA	icSync;
+	INCAR_SYNC_DATA icSync;
 
 	if(GetGameState() != GAMESTATE_CONNECTED) return;
 
-	memset(&icSync, 0, sizeof(INCAR_SYNC_DATA)); // 60
+	memset(&icSync, 0, sizeof(INCAR_SYNC_DATA));
 
 	bsSync.Read(bytePacketID);
 	bsSync.Read(playerId);
 	bsSync.Read(icSync.VehicleID);
 
-	// KEYS
+	// keys
 	bsSync.Read(icSync.lrAnalog);
 	bsSync.Read(icSync.udAnalog);
 	bsSync.Read(icSync.wKeys);
 
-	// QUATERNION
-	//四元数
-	bsSync.ReadNormQuat(icSync.Quat.W,
-		icSync.Quat.X,
-		icSync.Quat.Y,
-		icSync.Quat.Z);
+	// quaternion
+	bsSync.ReadNormQuat(
+		icSync.quat.w,
+		icSync.quat.x,
+		icSync.quat.y,
+		icSync.quat.z);
 
-	// POSITION
-	//位置
+	// position
 	bsSync.Read((char*)&icSync.vecPos, sizeof(VECTOR));
 
-	// SPEED
-	//速度
-	bsSync.ReadVector(icSync.vecMoveSpeed.X,
-						icSync.vecMoveSpeed.Y,
-						icSync.vecMoveSpeed.Z);
+	// speed
+	bsSync.ReadVector(
+		icSync.vecMoveSpeed.X,
+		icSync.vecMoveSpeed.Y,
+		icSync.vecMoveSpeed.Z);
 
-	// VEHICLE HEALTH
-	//载具血量
+	// vehicle health
 	uint16_t wTempVehicleHealth;
 	bsSync.Read(wTempVehicleHealth);
 	icSync.fCarHealth = (float)wTempVehicleHealth;
 
-	// HEALTH/ARMOUR (COMPRESSED INTO 1 BYTE)
-	//血量与护甲
+	// health/armour
 	uint8_t byteHealthArmour;
-	uint8_t byteArmTemp=0,byteHlTemp=0;
+	uint8_t byteArmTemp=0, byteHlTemp=0;
 
 	bsSync.Read(byteHealthArmour);
 	byteArmTemp = (byteHealthArmour & 0x0F);
@@ -414,69 +634,84 @@ void CNetGame::Packet_VehicleSync(Packet *p)
 	else icSync.bytePlayerHealth = byteHlTemp * 7;
 
 	// CURRENT WEAPON
-	//当前武器
 	uint8_t byteTempWeapon;
 	bsSync.Read(byteTempWeapon);
 	icSync.byteCurrentWeapon ^= (byteTempWeapon ^ icSync.byteCurrentWeapon) & 0x3F;
+
+	bool bCheck;
+
+	// siren
+	bsSync.Read(bCheck);
+	if(bCheck) icSync.byteSirenOn = 1;
+	// landinggear
+	bsSync.Read(bCheck);
+	if(bCheck) icSync.byteLandingGearState = 1;
+	// train speed
+	bsSync.Read(bCheck);
+	if(bCheck) bsSync.Read(icSync.fTrainSpeed);
+	// triler id
+	bsSync.Read(bCheck);
+	if(bCheck) bsSync.Read(icSync.TrailerID);
 
 	if(m_pPlayerPool)
 	{
 		pPlayer = m_pPlayerPool->GetAt(playerId);
 		if(pPlayer)
-			pPlayer->StoreInCarFullSyncData(&icSync);
+		{
+			pPlayer->StoreInCarFullSyncData(&icSync, 0);
+		}
 	}
 }
-//乘客同步
-void CNetGame::Packet_PassengerSync(Packet *p)
-{
-	CRemotePlayer * pPlayer;
-	RakNet::BitStream bsPassengerSync((unsigned char *)p->data, p->length, false);
 
-	uint8_t	bytePacketID = 0;
-	PLAYERID	playerId;
+void CNetGame::Packet_PassengerSync(Packet* pkt)
+{
+	CRemotePlayer *pPlayer;
+	uint8_t bytePacketID;
+	PLAYERID playerId;
 	PASSENGER_SYNC_DATA psSync;
 
 	if(GetGameState() != GAMESTATE_CONNECTED) return;
 
+	RakNet::BitStream bsPassengerSync((unsigned char *)pkt->data, pkt->length, false);
 	bsPassengerSync.Read(bytePacketID);
 	bsPassengerSync.Read(playerId);
-	bsPassengerSync.Read((char*)&psSync,sizeof(PASSENGER_SYNC_DATA));
+	bsPassengerSync.Read((char*)&psSync, sizeof(PASSENGER_SYNC_DATA));
 
-	if (m_pPlayerPool) 
+	if(m_pPlayerPool)
 	{
 		pPlayer = m_pPlayerPool->GetAt(playerId);
-		if(pPlayer) 
+		if(pPlayer)
 			pPlayer->StorePassengerFullSyncData(&psSync);
 	}
 }
-//标记同步
-//玩家标记
-// 0.3.7
-void CNetGame::Packet_MarkerSync(Packet *p)
+
+void CNetGame::Packet_MarkersSync(Packet *pkt)
 {
-	RakNet::BitStream bsMarkerSync((unsigned char *)p->data, p->length, false);
+	CRemotePlayer *pPlayer;
 	int			iNumberOfPlayers = 0;
 	PLAYERID	playerId;
 	short		sPos[3];
 	bool		bIsPlayerActive;
 	uint8_t 	unk0 = 0;
-	CRemotePlayer *pPlayer;
 
-	bsMarkerSync.Read(unk0);
-	bsMarkerSync.Read(iNumberOfPlayers);
+	if(GetGameState() != GAMESTATE_CONNECTED) return;
+
+	RakNet::BitStream bsMarkersSync((unsigned char *)pkt->data, pkt->length, false);
+	bsMarkersSync.Read(unk0);
+	bsMarkersSync.Read(iNumberOfPlayers);
 
 	if(iNumberOfPlayers)
 	{
-		for(int i = 0; i < iNumberOfPlayers; i++)
+		for(int i=0; i<iNumberOfPlayers; i++)
 		{
-			bsMarkerSync.Read(playerId);
-			bsMarkerSync.ReadCompressed(bIsPlayerActive);
+			bsMarkersSync.Read(playerId);
+			bsMarkersSync.ReadCompressed(bIsPlayerActive);
 
 			if(bIsPlayerActive)
 			{
-				bsMarkerSync.Read(sPos[0]); // x
-				bsMarkerSync.Read(sPos[1]); // y
-				bsMarkerSync.Read(sPos[2]); // z
+				bsMarkersSync.Read(sPos[0]);
+				bsMarkersSync.Read(sPos[1]);
+				bsMarkersSync.Read(sPos[2]);
 			}
 
 			if(playerId < MAX_PLAYERS && m_pPlayerPool->GetSlotState(playerId))
@@ -485,158 +720,11 @@ void CNetGame::Packet_MarkerSync(Packet *p)
 				if(pPlayer)
 				{
 					if(bIsPlayerActive)
-						pPlayer->SetupGlobalMarker(sPos[0], sPos[1], sPos[2]);
+						pPlayer->ShowGlobalMarker(sPos[0], sPos[1], sPos[2]);
 					else
-						pPlayer->HideGlobalMarker(0);
+						pPlayer->HideGlobalMarker();
 				}
 			}
-
-			//LOGI("MARKER_SYNC(unk: %d | iNumberOfPlayers: %d)", unk0, iNumberOfPlayers);
-			//LOGI("MARKER_SYNC(playerId: %d | bIsPlayerActive: %d)", playerId, bIsPlayerActive);
-			//LOGI("MARKER_SYNC(posX: %d | posY: %d | posZ: %d)", sPos[0], sPos[1], sPos[2]);
 		}
 	}
-}
-
-void gen_auth_key(char buf[260], char* auth_in);
-//验证密钥
-void CNetGame::Packet_AuthKey(Packet *pkt)
-{
-	RakNet::BitStream bsAuth((unsigned char *)pkt->data, pkt->length, false);
-
-	uint8_t byteAuthLen;
-	char szAuth[260];
-
-	bsAuth.IgnoreBits(8);
-	bsAuth.Read(byteAuthLen);
-	bsAuth.Read(szAuth, byteAuthLen);
-	szAuth[byteAuthLen] = '\0';
-
-	char szAuthKey[260];
- 	gen_auth_key(szAuthKey, szAuth);
-
- 	RakNet::BitStream bsKey;
- 	uint8_t byteAuthKeyLen = (uint8_t)strlen(szAuthKey);
- 	bsKey.Write((uint8_t)ID_AUTH_KEY);
- 	bsKey.Write((uint8_t)byteAuthKeyLen);
- 	bsKey.Write(szAuthKey, byteAuthKeyLen);
-
- 	m_pRakClient->Send(&bsKey, SYSTEM_PRIORITY, RELIABLE, NULL);
-
- 	//LOGI("[AUTH] %s -> %s", szAuth, szAuthKey);
-}
-//连接成功
-void CNetGame::Packet_ConnectionSucceeded(Packet *pkt)
-{
-	m_iGameState = GAMESTATE_AWAIT_JOIN;
-	LOGI("CNetGame::Packet_ConnectionSucceeded");
-	if(pChatWindow)
-		pChatWindow->AddDebugMessageNoGBK("已连接. 正在加入游戏...");
-	RakNet::BitStream bsSuccAuth((unsigned char *)pkt->data, pkt->length, false);
-	PLAYERID MyPlayerID;
-	unsigned int uiChallenge;
-
-	bsSuccAuth.IgnoreBits(8); // ID_CONNECTION_REQUEST_ACCEPTED
-	bsSuccAuth.IgnoreBits(32); // binaryAddress
-	bsSuccAuth.IgnoreBits(16); // port
-
-	bsSuccAuth.Read(MyPlayerID);
-	bsSuccAuth.Read(uiChallenge);
-
-	if (m_pPlayerPool) m_pPlayerPool->SetLocalPlayerID(MyPlayerID);
-
-	int iVersion = NETGAME_VERSION;
-	uint8_t byteMod = 0x01;
-	unsigned int uiClientChallengeResponse = uiChallenge ^ iVersion;
-
-	uint8_t byteAuthBSLen;
-	byteAuthBSLen = (uint8_t)strlen(AUTH_BS);
-	uint8_t byteNameLen = (uint8_t)strlen(m_pPlayerPool->GetLocalPlayerName());
-
-	RakNet::BitStream bsSend;
-	bsSend.Write(iVersion);
-	bsSend.Write(byteMod);
-	bsSend.Write(byteNameLen);
-	bsSend.Write(m_pPlayerPool->GetLocalPlayerName(), byteNameLen);
-	bsSend.Write(uiClientChallengeResponse);
-	bsSend.Write(byteAuthBSLen);
-	bsSend.Write(AUTH_BS, byteAuthBSLen);
-	bsSend.Write((uint8_t)5);
-	bsSend.Write("0.3.7", (uint8_t)5);
-	m_pRakClient->RPC(&RPC_ClientJoin, &bsSend, HIGH_PRIORITY, RELIABLE, 0, false, UNASSIGNED_NETWORK_ID, NULL);
-}
-//被封禁
-void CNetGame::Packet_ConnectionBanned(Packet *packet)
-{
-	LOGI("You are banned from this server.");
-	if(pChatWindow)
-		pChatWindow->AddDebugMessageNoGBK("你已被封禁至这个服务器");
-}
-//服务器满了
-void CNetGame::Packet_NoFreeIncomingConnections(Packet *packet)
-{
-	LOGI("The server is full. Retrying...");
-	if(pChatWindow)
-		pChatWindow->AddDebugMessageNoGBK("这个服务器已满，正在重试...");
-	SetGameState(GAMESTATE_WAIT_CONNECT);
-}
-//断开服务器
-void CNetGame::Packet_DisconnectionNotification(Packet *packet)
-{
-	LOGI("Server closed the connection.");
-	if(pChatWindow)
-//		pChatWindow->AddDebugMessageNoGBK("服务器已关闭连接.");
-	//m_pRakClient->Disconnect(0);
-			pChatWindow->AddDebugMessageNoGBK("正在重新连接...");
-		ShutdownForGameModeRestart();
-	SetGameState(GAMESTATE_WAIT_CONNECT);
-}
-//连接丢失
-void CNetGame::Packet_ConnectionLost(Packet *packet)
-{
-	LOGI("Lost connection to the server. Reconnecting..");
-	if(pChatWindow)
-		pChatWindow->AddDebugMessageNoGBK("与服务器丢失连接，正在重新连接...");
-	ShutdownForGameModeRestart();
-	SetGameState(GAMESTATE_WAIT_CONNECT);
-}
-//无效密码
-void CNetGame::Packet_InvalidPassword(Packet *packet)
-{
-	LOGI("Wrong server password.");
-	if(pChatWindow)
-		pChatWindow->AddDebugMessageNoGBK("服务器密码错误!");
-	m_pRakClient->Disconnect(0);
-}
-//连接丢失响应
-void CNetGame::Packet_ConnectAttemptFailed(Packet *packet)
-{
-	LOGI("The server didn't respond. Retrying..");
-	if(pChatWindow)
-		pChatWindow->AddDebugMessageNoGBK("与服务器失去响应，正在重试...");
-	SetGameState(GAMESTATE_WAIT_CONNECT);
-}
-//重置载具池
-void CNetGame::ResetVehiclePool()
-{
-	LOGI("CNetGame::ResetVehiclePool");
-
-	if(m_pVehiclePool)
-		delete m_pVehiclePool;
-
-	m_pVehiclePool = new CVehiclePool();
-}
-//设置地图图标
-void CNetGame::SetMapIcon(uint8_t byteIndex, float fX, float fY, float fZ, uint8_t byteIcon, uint32_t dwColor)
-{
-	if(byteIndex >= 32) return;
-	if(m_dwMapIcon[byteIndex] != 0) DisableMapIcon(byteIndex);
-	m_dwMapIcon[byteIndex] = pGame->CreateRadarMarkerIcon(byteIcon, fX, fY, fZ, dwColor);
-}
-//禁用地图图标
-void CNetGame::DisableMapIcon(uint8_t byteIndex)
-{
-	if(byteIndex >= 32) return;
-	ScriptCommand(&disable_marker, m_dwMapIcon[byteIndex]);
-	m_dwMapIcon[byteIndex] = 0;
 }

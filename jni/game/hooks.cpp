@@ -1,673 +1,344 @@
-#include "main.h"
-#include "util.h"
-#include "keystuff.h"
-#include <iostream>
-// imgui
-#include "imgui.h"
-#include "gui/renderware_imgui.h"
-extern CChatWindow *pChatWindow;
+#include "../main.h"
+#include "../util/armhook.h"
+#include "RW/RenderWare.h"
+#include "game.h"
+#include "net/netgame.h"
+#include "gui/gui.h"
+
 extern CNetGame *pNetGame;
-extern CGame *pGame;
+extern CGUI *pGUI;
 
-CVehicle 		*pVehicleClass;
-uintptr_t 		dwRetAddr = 0;
+// Neiae/SAMP
+bool g_bPlaySAMP = false;
 
-void DoInitStuff();
+void InitSAMP();
+void InitInMenu();
+void MainLoop();
+void HookCPad();
 
-uint32_t dwCurPlayerActor = 0;
-uint8_t byteCurPlayer = 0;
-uint8_t byteCurDriver = 0;
+/* ================ ie?oee aey ani. anoaaie =================== */
 
-uint32_t dwParam1;
-
-bool state = true;
-void tst()
+extern "C" uintptr_t get_lib() 
 {
-	CCamera *pGameCamera;
-	pGameCamera->Restore();
-	pGameCamera->SetBehindPlayer();
-	pGame->DisplayHUD(true);
-	pGame->FindPlayerPed()->TeleportTo(2495.0820, -1667.7239, 13.3438 + 1.0f);
+ 	return g_libGTASA;
 }
 
+/* ====================================================== */
+
+struct stFile
+{
+	int isFileExist;
+	FILE *f;
+};
+
+stFile* (*NvFOpen)(const char*, const char*, int, int);
+stFile* NvFOpen_hook(const char* r0, const char* r1, int r2, int r3)
+{
+	char path[0xFF] = { 0 };
+
+	// ----------------------------
+	if(!strncmp(r1+12, "mainV1.scm", 10))
+	{
+		sprintf(path, "%sSAMP/main.scm", g_pszStorage);
+		Log("Loading mainV1.scm..");
+		goto open;
+	}
+	// ----------------------------
+	if(!strncmp(r1+12, "SCRIPTV1.IMG", 12))
+	{
+		sprintf(path, "%sSAMP/script.img", g_pszStorage);
+		Log("Loading script.img..");
+		goto open;
+	}
+	// ----------------------------
+	if(!strncmp(r1, "DATA/PEDS.IDE", 13))
+	{
+		sprintf(path, "%s/SAMP/peds.ide", g_pszStorage);
+		Log("Loading peds.ide..");
+		goto open;
+	}
+	// ----------------------------
+	if(!strncmp(r1, "DATA/VEHICLES.IDE", 17))
+	{
+		sprintf(path, "%s/SAMP/vehicles.ide", g_pszStorage);
+		Log("Loading vehicles.ide..");
+		goto open;
+	}
+
+orig:
+	return NvFOpen(r0, r1, r2, r3);
+
+open:
+	stFile *st = (stFile*)malloc(8);
+	st->isFileExist = false;
+
+	FILE *f  = fopen(path, "rb");
+	if(f)
+	{
+		st->isFileExist = true;
+		st->f = f;
+		return st;
+	}
+	else
+	{
+		Log("NVFOpen hook | Error: file not found (%s)", path);
+		free(st);
+		st = nullptr;
+		return 0;
+	}
+}
+
+/* ====================================================== */
+
+// Aucuaaaony ec Java
+int Init_hook(int r0, int r1, int r2)
+{
+	int result = (( int (*)(int, int, int))(g_libGTASA+0x244F2C+1))(r0, r1, r2);
+
+	InitSAMP();
+
+	return result;
+}
+
+/* ====================================================== */
+
+bool bGameStarted = false;
 void (*Render2dStuff)();
 void Render2dStuff_hook()
 {
-	DoInitStuff();
+	bGameStarted = true;
+	MainLoop();
 
-	if (pNetGame)
-		pNetGame->Process();
-
-	DrawPlayerTags();
-
-	if(state == false)
-	{
-		state = true;
-		tst();
-	}
-
-	return (*Render2dStuff)();
+	Render2dStuff();
+	return;
 }
 
-uintptr_t (*NvFOpen)(const char*, const char*, uint32_t, uint32_t);
-uintptr_t NvFOpen_hook(const char* v1, const char* v2, uint32_t v3, uint32_t v4)
+/* ====================================================== */
+
+void (*Render2dStuffAfterFade)();
+void Render2dStuffAfterFade_hook()
 {
-	char path[0xFF] = {0};
-	uint32_t *st = (uint32_t*)malloc(8);
-	st[0] = 1;
-
-	char* storage = (char*)(g_libGTASA+0x63C4B8);
-
-	if(!strcmp(v2+12, "mainV1.scm"))
-	{
-			LOGI("Loading main.scm");
-			sprintf(path, "%sSAMP/main.scm", storage);
-			st[1] = (uint32_t)fopen(path, "rb");
-			LOGI("File handle: 0x%X", st[1]);
-			return (uintptr_t)st;
-	}
-
-	if(!strcmp(v2+12, "SCRIPTV1.IMG"))
-	{
-			LOGI("Loading SCRIPT.IMG");
-			sprintf(path, "%sSAMP/SCRIPT.IMG", storage);
-			st[1] = (uint32_t)fopen(path, "rb");
-			LOGI("File handle: 0x%X", st[1]);
-			return (uintptr_t)st;
-	}
-
-	if(!strcmp(v2+5, "DEFAULT.DAT"))
-	{
-		LOGI("Loading DEFAULT.DAT");
-		sprintf(path, "%sSAMP/DEFAULT.DAT", storage);
-		st[1] = (uint32_t)fopen(path, "rb");
-		LOGI("File handle: 0x%X", st[1]);
-		return (uintptr_t)st;
-	}
-
-	if(!strcmp(v2, "DATA/PEDS.IDE"))
-	{
-		LOGI("Loading PEDS.IDE");
-		sprintf(path, "%sSAMP/PEDS.IDE", storage);
-		st[1] = (uint32_t)fopen(path, "r");
-		LOGI("File handle: 0x%X", st[1]);
-		return (uintptr_t)st;
-	}
-	
-	if(!strcmp(v2+5, "VEHICLES.IDE"))
-	{
-		LOGI("Loading VEHICLES.IDE");
-		sprintf(path, "%sSAMP/VEHICLES.IDE", storage);
-		st[1] = (uint32_t)fopen(path, "rb");
-		LOGI("File handle: 0x%X", st[1]);
-		return (uintptr_t)st;
-	}
-
-	/*if(!strcmp(v2+11, "tracks2.dat"))
-	{
-		LOGI("Loading tracks2.dat");
-		sprintf(path, "%sSAMP/tracks2.dat", storage);
-		st[1] = (uint32_t)fopen(path, "rb");
-		LOGI("File handle: 0x%X", st[1]);
-		return (uintptr_t)st;
-	}*/
-
-	/*if(!strcmp(v2+11, "tracks4.dat"))
-	{
-		LOGI("Loading tracks4.dat");
-		sprintf(path, "%sSAMP/tracks4.dat", storage);
-		st[1] = (uint32_t)fopen(path, "rb");
-		LOGI("File handle: 0x%X", st[1]);
-		return (uintptr_t)st;
-	}*/
-
-	if(!strcmp(v2+5, "CUSTOM.IMG"))
-	{
-		LOGI("Loading CUSTOM.IMG");
-		sprintf(path, "%sSAMP/CUSTOM.IMG", storage);
-		st[1] = (uint32_t)fopen(path, "rb");
-		LOGI("File handle: 0x%X", st[1]);
-		return (uintptr_t)st;
-	}
-
-		if(!strcmp(v2+5, "SAMP.IMG"))
-	{
-		LOGI("Loading SAMP.IMG");
-		sprintf(path, "%sSAMP/SAMP.IMG", storage);
-		st[1] = (uint32_t)fopen(path, "rb");
-		LOGI("File handle: 0x%X", st[1]);
-		return (uintptr_t)st;
-	}
-
-	if(!strcmp(v2+5, "GTA.DAT"))
-	{
-		LOGI("Loading GTA.DAT");
-		sprintf(path, "%sSAMP/GTA.DAT", storage);
-		st[1] = (uint32_t)fopen(path, "rb");
-		LOGI("File handle: 0x%X", st[1]);
-		return (uintptr_t)st;
-	}
-
-	if(!strcmp(v2+5, "samp.IDE"))
-	{
-		LOGI("Loading samp.IDE");
-		sprintf(path, "%sSAMP/samp.IDE", storage);
-		st[1] = (uint32_t)fopen(path, "rb");
-		LOGI("File handle: 0x%X", st[1]);
-		return (uintptr_t)st;
-	}
-
-	if(!strcmp(v2+5, "custom.IDE"))
-	{
-		LOGI("Loading custom.IDE");
-		sprintf(path, "%sSAMP/custom.IDE", storage);
-		st[1] = (uint32_t)fopen(path, "rb");
-		LOGI("File handle: 0x%X", st[1]);
-		return (uintptr_t)st;
-	}
-
-	if(!strcmp(v2, "texdb/samp")) // texdb/%s/%s.txt
-	{
-		LOGI("Loading %s", v2);
-		sprintf(path, "%sSAMP/%s", storage, v2);
-		st[1] = (uint32_t)fopen(path, "rb");
-		LOGI("File handle: 0x%X", st[1]);
-		return (uintptr_t)st;
-	}
-
-	if(!strcmp(v2, "Textures/Fonts/RussianFont.met"))
-	{
-		LOGI("Loading RussianFont.met");
-		sprintf(path, "%sSAMP/font/samp.met", storage);
-		st[1] = (uint32_t)fopen(path, "r");
-		LOGI("File handle: 0x%X", st[1]);
-		return (uintptr_t)st;
-	}
-
-	if(!strcmp(v2, "Textures/Fonts/RussianFont.png"))
-	{
-		LOGI("Loading RussianFont.png");
-		sprintf(path, "%sSAMP/font/samp.png", storage);
-		st[1] = (uint32_t)fopen(path, "rb");
-		LOGI("File handle: 0x%X", st[1]);
-		return (uintptr_t)st;
-	}
-	
-	//LOGI(v2);
-	return NvFOpen(v1, v2, v3, v4);
+	Render2dStuffAfterFade();
+	if(pGUI && bGameStarted) pGUI->Render();
+	return;
 }
 
-uint32_t (*CPed__ProcessControl)(uintptr_t thiz);
-uint32_t CPed__ProcessControl_hook(uintptr_t thiz)
+/* ====================================================== */
+
+uint16_t gxt_string[0x7F];
+uint16_t* (*CText_Get)(uintptr_t thiz, const char* text);
+uint16_t* CText_Get_hook(uintptr_t thiz, const char* text)
 {
-	dwCurPlayerActor = thiz;
-	byteCurPlayer = FindPlayerNumFromPedPtr(dwCurPlayerActor);
-
-	if(dwCurPlayerActor && (byteCurPlayer != 0))
+	if(text[0] == 'S' && text[1] == 'A' && text[2] == 'M' && text[3] == 'P')
 	{
-		// REMOTE PLAYER
+		const char* code = &text[5];
+		if(!strcmp(code, "MP")) CFont::AsciiToGxtChar("MultiPlayer", gxt_string);
 
-		// CPed::UpdatePosition nulled from CPed::ProcessControl
-		UnFuck(g_libGTASA+0x439B7A);
-		NOP(g_libGTASA+0x439B7A, 2);
-
-		// CWidget::setEnabled
-		WriteMemory(g_libGTASA+0x274178, "\x70\x47", 2);
-
-
-		// call original
-		(*CPed__ProcessControl)(thiz);
-		// restore
-		WriteMemory(g_libGTASA+0x439B7A, "\xFA\xF7\x1D\xF8", 4);
-		WriteMemory(g_libGTASA+0x274178, "\x80\xB4", 2);
-	}
-	else
-	{
-		// LOCAL PLAYER
-
-		// Apply the original code to set ped rot from Cam
-		WriteMemory(g_libGTASA+0x4BED92, "\x10\x60", 2);
-
-		(*CPed__ProcessControl)(thiz);
-
-		// Reapply the no ped rots from Cam patch
-		WriteMemory(g_libGTASA+0x4BED92, "\x00\x46", 2);
+    	return gxt_string;
 	}
 
-	return 0;
+	return CText_Get(thiz, text);
 }
 
-/*
-	W = 0xFF80
-	S = 0x80
-	A = 0xFF80
-	D = 0x80
-*/
-//GiveWeapon武器
-//g_libGTASA+0x43429D
-uint16_t (*CPad__GetPedWalkLeftRight)(uintptr_t thiz);
-uint16_t CPad__GetPedWalkLeftRight_hook(uintptr_t thiz)
+/* ====================================================== */
+
+void MainMenu_OnStartSAMP()
 {
-	// REMOTE PLAYER
-	if(dwCurPlayerActor && (byteCurPlayer != 0))
+	Log("MainMenu: MultiPlayer selected.");
+
+	if(g_bPlaySAMP) return;
+
+	InitInMenu();
+
+	// StartGameScreen::OnNewGameCheck()
+	(( void (*)())(g_libGTASA+0x261C8C+1))();
+
+	g_bPlaySAMP = true;
+	return;
+}
+
+// OsArray<FlowScreen::MenuItem>::Add
+void (*MenuItem_add)(int r0, uintptr_t r1);
+void MenuItem_add_hook(int r0, uintptr_t r1)
+{
+	static bool bMenuInited = false;
+	char* name = *(char**)(r1+4);
+
+	if(!strcmp(name, "FEP_STG") && !bMenuInited)
 	{
-		return GcsRemotePlayerKeys[byteCurPlayer].wWalkLR;
+		Log("Creating \"MultiPlayer\" button.. (struct: 0x%X)", r1);
+		// Nicaaai eiiieo "New Game"
+		MenuItem_add(r0, r1);
+
+		// eiiiea "MultiPlayer"
+		*(char**)(r1+4) = "SAMP_MP";
+		*(uintptr_t*)r1 = LoadTextureFromDB("samp", "menu_mainmp");
+		*(uintptr_t*)(r1+8) = (uintptr_t)MainMenu_OnStartSAMP;
+
+		bMenuInited = true;
+		goto ret;
 	}
 
-	// LOCAL PLAYER
-	GcsLocalPlayerKeys.wWalkLR = CPad__GetPedWalkLeftRight(thiz);
-	return GcsLocalPlayerKeys.wWalkLR;
+	// Eaii?e?oai nicaaiea "Start Game" e "Stats" ec iai? iaocu
+	if(g_bPlaySAMP && (
+		!strcmp(name, "FEP_STG") ||
+		!strcmp(name, "FEH_STA") ||
+		!strcmp(name, "FEH_BRI") ))
+		return;
+
+ret:
+	return MenuItem_add(r0, r1);
 }
 
-uint16_t (*CPad__GetPedWalkUpDown)(uintptr_t thiz);
-uint16_t CPad__GetPedWalkUpDown_hook(uintptr_t thiz)
+/* ====================================================== */
+
+// CGame::InitialiseRenderWare
+void (*InitialiseRenderWare)();
+void InitialiseRenderWare_hook()
 {
-	// REMOTE PLAYER
-	if(dwCurPlayerActor && (byteCurPlayer != 0))
-		return GcsRemotePlayerKeys[byteCurPlayer].wWalkUD;
+	Log("Loading \"samp\" cd..");
 
-	// LOCAL PLAYER
-	GcsLocalPlayerKeys.wWalkUD = CPad__GetPedWalkUpDown(thiz);
-	return GcsLocalPlayerKeys.wWalkUD;
+	InitialiseRenderWare();
+	// TextureDatabaseRuntime::Load()
+	(( void (*)(const char*, int, int))(g_libGTASA+0x1BF244+1))("samp", 0, 5);
+	return;
 }
 
-// допилить
-uint8_t (*CPad__DuckJustDown)(uintptr_t thiz);
-uint8_t CPad__DuckJustDown_hook(uintptr_t thiz)
+/* ====================================================== */
+
+void RenderSplashScreen();
+void (*CLoadingScreen_DisplayPCScreen)();
+void CLoadingScreen_DisplayPCScreen_hook()
 {
-	// REMOTE PLAYER
-	if(dwCurPlayerActor && (byteCurPlayer != 0))
-		return GcsRemotePlayerKeys[byteCurPlayer].bDuckJustDown;
+	RwCamera* camera = *(RwCamera**)(g_libGTASA+0x95B064);
 
-	// LOCAL PLAYER
-	GcsLocalPlayerKeys.bDuckJustDown = CPad__DuckJustDown(thiz);
-	return GcsLocalPlayerKeys.bDuckJustDown;
-}
-
-uint8_t (*CPad__JumpJustDown)(uintptr_t thiz);
-uint8_t CPad__JumpJustDown_hook(uintptr_t thiz)
-{
-
-	// REMOTE PLAYER
-	if(dwCurPlayerActor && (byteCurPlayer != 0))
-		return GcsRemotePlayerKeys[byteCurPlayer].bJumpJustDown;
-	
-	// LOCAL PLAYER
-	GcsLocalPlayerKeys.bJumpJustDown = CPad__JumpJustDown(thiz);
-	return GcsLocalPlayerKeys.bJumpJustDown;
-}
-
-uint8_t (*CPad__GetSprint)(uintptr_t thiz, uint32_t unk);
-uint8_t CPad__GetSprint_hook(uintptr_t thiz, uint32_t unk)
-{
-	// REMOTE PLAYER
-	if(dwCurPlayerActor && (byteCurPlayer != 0))
-		return GcsRemotePlayerKeys[byteCurPlayer].bSprintJustDown;
-		
-	// LOCAL PLAYER
-	GcsLocalPlayerKeys.bSprintJustDown = CPad__GetSprint(thiz, unk);
-	return GcsLocalPlayerKeys.bSprintJustDown;
-}
-
-uint8_t (*CPad__MeleeAttackJustDown)(uintptr_t thiz);
-uint8_t CPad__MeleeAttackJustDown_hook(uintptr_t thiz)
-{
-	// REMOTE PLAYER
-	if(dwCurPlayerActor && (byteCurPlayer != 0))
-	return GcsRemotePlayerKeys[byteCurPlayer].bMeleeAttackJustDown;
-
-	// LOCAL PLAYER
-	GcsLocalPlayerKeys.bMeleeAttackJustDown = CPad__MeleeAttackJustDown(thiz);
-	return GcsLocalPlayerKeys.bMeleeAttackJustDown;
-}
-
-// -------------- VEHICLE ------------------------
-
-int16_t (*CPad__GetSteeringLeftRight)(uintptr_t thiz);
-int16_t CPad__GetSteeringLeftRight_hook(uintptr_t thiz)
-{	
-	// REMOTE PLAYER
-	if(byteCurDriver != 0)
-		return (int16_t)GcsRemotePlayerKeys[byteCurDriver].wSteeringLR;
-
-	// LOCAL PLAYER
-	GcsLocalPlayerKeys.wSteeringLR = CPad__GetSteeringLeftRight(thiz);
-	return (int16_t)GcsLocalPlayerKeys.wSteeringLR;
-}
-
-uint16_t (*CPad__GetBrake)(uintptr_t thiz);
-uint16_t CPad__GetBrake_hook(uintptr_t thiz)
-{
-	// REMOTE PLAYER
-	if(byteCurDriver != 0)
-		return GcsRemotePlayerKeys[byteCurDriver].wBrake;
-
-	// LOCAL PLAYER
-	GcsLocalPlayerKeys.wBrake = CPad__GetBrake(thiz);
-	return GcsLocalPlayerKeys.wBrake;
-}
-
-uint16_t (*CPad__GetAccelerate)(uintptr_t thiz);
-uint16_t CPad__GetAccelerate_hook(uintptr_t thiz)
-{
-	// REMOTE PLAYER
-	if(byteCurDriver != 0)
-		return GcsRemotePlayerKeys[byteCurDriver].wAccelerate;
-
-	// LOCAL PLAYER
-	GcsLocalPlayerKeys.wAccelerate = CPad__GetAccelerate(thiz);
-	return GcsLocalPlayerKeys.wAccelerate;
-}
-
-// допилить
-uint32_t  AllVehicles_ProcessControl_Hook(uint32_t thiz)
-{
-	VEHICLE_TYPE *pVehicle = (VEHICLE_TYPE*)thiz;
-	byteCurDriver = FindPlayerNumFromPedPtr((uint32_t)pVehicle->pDriver);
-
-	uintptr_t vtbl = ((*(uintptr_t*)thiz) - g_libGTASA);
-	uintptr_t call_addr = 0;
-	switch(vtbl)
+	if(RwCameraBeginUpdate(camera))
 	{
-		// CAutomobile
-		case 0x5CC9F0:
-			call_addr = 0x4E314C;
-			//LOGI("vtbl CAutomobile");
-			break;
-		// CBoat
-		case 0x5CCD48:
-			call_addr = 0x4F7408;
-			//LOGI("vtbl CBoat");
-			break;
-		// CBike
-		case 0x5CCB18:
-			call_addr = 0x4EE790;
-			//LOGI("vtbl CBike");
-			break;
-		// CPlane
-		case 0x5CD0B0:
-			call_addr = 0x5031E8;
-			//LOGI("vtbl CPlane");
-			break;
-		// CHeli
-		case 0x5CCE60:
-			call_addr = 0x4FE62C;
-			//LOGI("vtbl CHeli");
-			break;
-		// CBmx
-		case 0x5CCC30:
-			call_addr = 0x4F3CE8;
-			//LOGI("vtbl CBmx");
-			break;
-		// CMonsterTruck
-		case 0x5CCF88:
-			call_addr = 0x500A34;
-			//LOGI("vtbl CMonsterTruck");
-			break;
-		// CQuadBike
-		case 0x5CD1D8:
-			call_addr = 0x505840;
-			//LOGI("vtbl CQuadBike");
-			break;
-		// CTrain
-		case 0x5CD428:
-			call_addr = 0x50AB24;
-			//LOGI("vtbl CTrain");
-			break;
-	}
-	void (*CAEVehicleAudioEntity_Service)(uintptr_t CAEVehicleAudioEntity);
-    *(void **)(&CAEVehicleAudioEntity_Service) = (void*)(g_libGTASA+0x364B64+1);
-
-	if(pVehicle->pDriver && (pVehicle->pDriver->dwPedType == 0) && (pVehicle->pDriver != GamePool_FindPlayerPed()))
-	{
-		// REMOTE PLAYER
-
-		// CWidget::setEnabled
-		// ret 0
-		WriteMemory(g_libGTASA+0x274178, "\x70\x47", 2);
-
-
-		// radio/engine
-		// допилить
-		pVehicle->pDriver->dwPedType = 4;
-    	(*CAEVehicleAudioEntity_Service)(thiz+0x138);
-    	pVehicle->pDriver->dwPedType = 0;
-
-    	// restore
-		WriteMemory(g_libGTASA+0x274178, "\x80\xB4", 2);
-	}
-	else
-	{
-		// LOCAL PLAYER
-		// radio/engine
-		(*CAEVehicleAudioEntity_Service)(thiz+0x138);
+		DefinedState2d();
+		(( void (*)())(g_libGTASA+0x5519C8+1))(); // CSprite2d::InitPerFrame()
+		RwRenderStateSet(rwRENDERSTATETEXTUREADDRESS, (void*)rwTEXTUREADDRESSCLAMP);
+		(( void (*)(bool))(g_libGTASA+0x198010+1))(false); // emu_GammaSet()
+		RenderSplashScreen();
+		RwCameraEndUpdate(camera);
+		RwCameraShowRaster(camera, 0, 0);
 	}
 
-	uint32_t (*ProcessControl)(VEHICLE_TYPE *pVehicle);
-    *(void **)(&ProcessControl) = (void*)(g_libGTASA+call_addr+1);
-    uint32_t dwRet = (*ProcessControl)(pVehicle);
-
-    return dwRet;
+	return;
 }
 
-uint8_t bGZ = 0;
-uint32_t (*CRadar__DrawRadarGangOverlay)(uint8_t v1);
-uint32_t CRadar__DrawRadarGangOverlay_hook(uint8_t v1)
-{
-	bGZ = v1;
-	if (pNetGame && pNetGame->GetGangZonePool()) pNetGame->GetGangZonePool()->Draw();
+/* ====================================================== */
 
-	return 0;
+void (*TouchEvent)(int, int, int posX, int posY);
+void TouchEvent_hook(int type, int num, int posX, int posY)
+{
+	bool bRet = pGUI->OnTouchEvent(type, num, posX, posY);
+
+	if(bRet) 
+		return TouchEvent(type, num, posX, posY);
 }
 
-/*
-viewport: 0, 0, 1280, 720
+/* ====================================================== */
 
-*/
-/*
-static const GLfloat globVertexBufferData[] = {
-	0.0f,  0.5f, 0.0f,
-   -0.5f, -0.5f, 0.0f,
-    0.5f, -0.5f, 0.0f
-};
-
-const GLfloat color[] = { 0.0f, 0.6f, 1.0f, 1.0f } ;
-
-const char* vertexShaderCode = 
-	"attribute vec4 vPosition;\n"
-	"void main(){\n"
-	"gl_Position = vPosition;\n"
-	"}";
-
-const char* fragmentShaderCode = 
-	"precision mediump float;\n"
-	"uniform vec4 vColor;\n"
-	"void main(){\n"
-	"gl_FragColor = vColor;\n"
-	"}";
-	/
-int LoadShader(int type, const char* shaderCode)
+void (*CStreaming_InitImageList)();
+void CStreaming_InitImageList_hook()
 {
-	int shader = glCreateShader(type);
-	glShaderSource(shader, 1, &shaderCode, 0);
-	glCompileShader(shader);
-	return shader;
-}*/
+	char* ms_files = (char*)(g_libGTASA+0x6702FC);
+	ms_files[0] = 0;
+	*(uint32_t*)&ms_files[44] = 0;
+	ms_files[48] = 0;
+	*(uint32_t*)&ms_files[92] = 0;
+	ms_files[96] = 0;
+	*(uint32_t*)&ms_files[140] = 0;
+	ms_files[144] = 0;
+	*(uint32_t*)&ms_files[188] = 0;
+	ms_files[192] = 0;
+	*(uint32_t*)&ms_files[236] = 0;
+	ms_files[240] = 0;
+	*(uint32_t*)&ms_files[284] = 0;
+	ms_files[288] = 0;
+	*(uint32_t*)&ms_files[332] = 0;
+	ms_files[336] = 0;
+	*(uint32_t*)&ms_files[380] = 0;
 
-bool ogl_bInit = false;
-uint32_t (*RQ_Command_rqSwapBuffers)(uint32_t r0);
-uint32_t RQ_Command_rqSwapBuffers_hook(uint32_t r0)
-{
-	if (!ogl_bInit)
-  	{
-  	}
-
-	return (*RQ_Command_rqSwapBuffers)(r0);
+	(( uint32_t (*)(char*, uint32_t))(g_libGTASA+0x28E7B0+1))("TEXDB\\GTA3.IMG", 1); // CStreaming::AddImageToList
+	(( uint32_t (*)(char*, uint32_t))(g_libGTASA+0x28E7B0+1))("TEXDB\\GTA_INT.IMG", 1); // CStreaming::AddImageToList
+	(( uint32_t (*)(char*, uint32_t))(g_libGTASA+0x28E7B0+1))("TEXDB\\SAMP.IMG", 1); // CStreaming::AddImageToList
 }
+
+/* ====================================================== */
+typedef struct _PED_MODEL
+{
+	uintptr_t 	vtable;
+	uint8_t		data[88];
+} PED_MODEL; // SIZE = 92
+
+PED_MODEL PedsModels[315];
+int PedsModelsCount = 0;
+
+PED_MODEL* (*CModelInfo_AddPedModel)(int id);
+PED_MODEL* CModelInfo_AddPedModel_hook(int id)
+{
+	//Log("loading skin model %d", id);
+
+	PED_MODEL* model = &PedsModels[PedsModelsCount];
+	memset(model, 0, sizeof(PED_MODEL));
+    model->vtable = (uintptr_t)(g_libGTASA+0x5C6E90);
+
+    // CClumpModelInfo::CClumpModelInit()
+    (( uintptr_t (*)(PED_MODEL*))(*(void**)(model->vtable+0x1C)))(model);
+
+    *(PED_MODEL**)(g_libGTASA+0x87BF48+(id*4)) = model; // CModelInfo::ms_modelInfoPtrs
+
+	PedsModelsCount++;
+	return model;
+}
+/* ====================================================== */
 
 uint32_t (*CRadar__GetRadarTraceColor)(uint32_t color, uint8_t bright, uint8_t friendly);
 uint32_t CRadar__GetRadarTraceColor_hook(uint32_t color, uint8_t bright, uint8_t friendly)
 {
-	//LOGI("CRadar__GetRadarTraceColor");
-
 	return TranslateColorCodeToRGBA(color);
 }
 
-bool NotifyEnterVehicle(VEHICLE_TYPE *_pVehicle)
+int (*CRadar__SetCoordBlip)(int r0, float X, float Y, float Z, int r4, int r5, char* name);
+int CRadar__SetCoordBlip_hook(int r0, float X, float Y, float Z, int r4, int r5, char* name)
 {
-	LOGI("NotifyEnterVehicle");
+	if(pNetGame && !strncmp(name, "CODEWAY", 7))
+	{
+		float findZ = (( float (*)(float, float))(g_libGTASA+0x3C3DD8+1))(X, Y);
+		findZ += 1.5f;
 
-	if(!pNetGame) return false;
+		Log("OnPlayerClickMap: %f, %f, %f", X, Y, Z);
+		RakNet::BitStream bsSend;
+		bsSend.Write(X);
+		bsSend.Write(Y);
+		bsSend.Write(findZ);
+		pNetGame->GetRakClient()->RPC(&RPC_MapMarker, &bsSend, HIGH_PRIORITY, RELIABLE, 0, false, UNASSIGNED_NETWORK_ID, nullptr);
+	}
 
-	CVehiclePool *pVehiclePool = pNetGame->GetVehiclePool();
-	VEHICLEID VehicleID = pVehiclePool->FindIDFromGtaPtr(_pVehicle);
-
-	if(VehicleID == INVALID_VEHICLE_ID) return false;
-	if(!pVehiclePool->GetSlotState(VehicleID)) return false;
-	pVehicleClass = pVehiclePool->GetAt(VehicleID);
-//	if(pVehicleClass->m_bDoorsLocked) return false;
-	if(pVehicleClass->m_pVehicle->entity.nModelIndex == TRAIN_PASSENGER) return false;
-
-	if(pVehicleClass->m_pVehicle->pDriver &&
-	   	pVehicleClass->m_pVehicle->pDriver->dwPedType != 0)
-		return false;
-
-	CLocalPlayer *pLocalPlayer = pNetGame->GetPlayerPool()->GetLocalPlayer();
-
-	//if(pLocalPlayer->GetPlayerPed() && pLocalPlayer->GetPlayerPed()->GetCurrentWeapon() == WEAPON_PARACHUTE)
-	//	pLocalPlayer->GetPlayerPed()->SetArmedWeapon(0);
-
-	pLocalPlayer->SendEnterVehicleNotification(VehicleID, false);
-
-	return true;
+	return CRadar__SetCoordBlip(r0, X, Y, Z, r4, r5, name);
 }
 
-void (*CTaskComplexEnterCarAsDriver)(uintptr_t** thiz, VEHICLE_TYPE *pVehicle);
-extern "C" uint32_t NotifyEnterVehicle(uintptr_t** thiz, VEHICLE_TYPE *_pVehicle)
- {
- 	if(pNetGame) {
- 		// Remote player
- 		CVehiclePool *pVehiclePool=pNetGame->GetVehiclePool();
- 		VEHICLEID VehicleID=pVehiclePool->FindIDFromGtaPtr(_pVehicle);
- 
- 		if(VehicleID == INVALID_VEHICLE_ID) return false;
- 		if(!pVehiclePool->GetSlotState(VehicleID)) return false;
- 		CVehicle *pVehicleClass = pVehiclePool->GetAt(VehicleID);
- //		if(pVehicleClass->m_bDoorsLocked) return false;
- 		if(pVehicleClass->m_pVehicle->entity.nModelIndex == TRAIN_PASSENGER) return false;
- 
- 		// if there's a ped driver, prevent entry
- 		if( pVehicleClass->m_pVehicle->pDriver &&
- 		pVehicleClass->m_pVehicle->pDriver->dwPedType != 0 )
- 			return false;
- 
- 		CLocalPlayer *pLocalPlayer = pNetGame->GetPlayerPool()->GetLocalPlayer();
- 
- 		/*if(pLocalPlayer->GetPlayerPed() && pLocalPlayer->GetPlayerPed()->GetCurrentWeapon() == WEAPON_PARACHUTE) {
- 			pLocalPlayer->GetPlayerPed()->SetArmedWeapon(0);
- 		}*/
- 
- 		pLocalPlayer->SendEnterVehicleNotification(VehicleID,false);
- 	}
- 
- 	return true;
- }
- 
-extern "C" uintptr_t get_lib() {
- 	return g_libGTASA;
- }
- 
-extern "C" uintptr_t get_enter_func_ptr() {
- 	return (uintptr_t)CTaskComplexEnterCarAsDriver;
- }
- 
- void __attribute__((naked)) CTaskComplexEnterCarAsDriver_hook(uintptr_t** thiz, VEHICLE_TYPE *pVehicle)
- {
- 	__asm__ volatile ("push {lr}\n\t"
- 			  "push {r4,r5}\n\t"
- 			  "push {r0,r1}\n\t"
- 			  // Compare addresses
- 			  "mov r5, lr\n\t"
- 			  "blx get_lib\n\t"
- 			  "mov r4, r0\n\t"
- 			  "add r4, #0x3A0000\n\t"
- 			  "add r4, #0xEE00\n\t"
- 			  "add r4, #0xF7\n\t"
- 			  "cmp r5, r4\n\t"
- 			  "bne 1f\n\t"
- 			  // Notify that we're entering vehicle
- 			  "pop {r0,r1}\n\t"
- 			  "push {r0,r1}\n\t"
-			  "blx NotifyEnterVehicle\n\t"
- 			  "mov r4, r0\n\t"
- 			  "pop {r0,r1}\n\t"
- 			  "push {r0,r1}\n\t"
- 			  "cbz r4, 2f\n\t"
- 			  // Call original function
- 			  "1:\n\t"
- 			  "blx get_enter_func_ptr\n\t"
- 			  "mov r4, r0\n\t"
- 			  "pop {r0,r1}\n\t"
- 			  "push {r0,r1}\n\t"
- 			  "blx r4\n\t"
- 			  "pop {r0,r1}\n\t"
- 			  "pop {r4,r5}\n\t"
- 			  "pop {pc}\n\t"
- 			  // Go away
- 			  "2:\n\t"
- 			  "blx get_lib\n\t"
- 			  "mov r3, r0\n\t"
- 			  "pop {r0,r1}\n\t"
- 			  "push {r0,r1}\n\t"
- 			  // Call destructor if task exists
- 			  "ldr r5, [r0]\n\t"
- 			  "cmp r5, #0\n\t"
- 			  "ittt ne\n\t"
- 			  "ldrne r5, [r5]\n\t"
- 			  "cmpne r5, #0\n\t"
- 			  "blxne r5\n\t"
- 			  "pop {r0,r1}\n\t"
- 			  "add r3, #0x3A0000\n\t"
-			  "add r3, #0xDA00\n\t"
-			  "add r3, #0xE7\n\t"
- 			  "pop {r4,r5}\n\t"
- 			  "add sp, sp, #4\n\t"
- 			  "bx r3\n\t");
+uint8_t bGZ = 0;
+void (*CRadar__DrawRadarGangOverlay)(uint8_t v1);
+void CRadar__DrawRadarGangOverlay_hook(uint8_t v1)
+{
+	bGZ = v1;
+	if (pNetGame && pNetGame->GetGangZonePool()) 
+		pNetGame->GetGangZonePool()->Draw();
 }
- 
- void (*CTaskComplexLeaveCar)(uintptr_t** thiz, VEHICLE_TYPE *pVehicle, int iTargetDoor, int iDelayTime, bool bSensibleLeaveCar, bool bForceGetOut);
- void CTaskComplexLeaveCar_hook(uintptr_t** thiz, VEHICLE_TYPE *pVehicle, int iTargetDoor, int iDelayTime, bool bSensibleLeaveCar, bool bForceGetOut) 
- {
- 	uintptr_t dwRetAddr = 0;
- 	__asm__ volatile ("mov %0, lr" : "=r" (dwRetAddr));
- 	dwRetAddr -= g_libGTASA;
- 
- 	if (dwRetAddr == 0x3AE905 || dwRetAddr == 0x3AE9CF) {
- 		if (pNetGame) {
- 			if (GamePool_FindPlayerPed()->pVehicle == (uint32_t)pVehicle) {
- 				CVehiclePool *pVehiclePool=pNetGame->GetVehiclePool();
- 				VEHICLEID VehicleID=pVehiclePool->FindIDFromGtaPtr((VEHICLE_TYPE *)GamePool_FindPlayerPed()->pVehicle);
- 				CLocalPlayer *pLocalPlayer = pNetGame->GetPlayerPool()->GetLocalPlayer();
- 				pLocalPlayer->SendExitVehicleNotification(VehicleID);
- 			}
- 		}
- 	}
- 
- 	(*CTaskComplexLeaveCar)(thiz, pVehicle, iTargetDoor, iDelayTime, bSensibleLeaveCar, bForceGetOut);
- }
- 
+
+uint32_t dwParam1, dwParam2;
 extern "C" void pickup_ololo()
 {
 	if(pNetGame && pNetGame->GetPickupPool())
 	{
-		LOGI("dwParam1 = %d", dwParam1);
-		LOGI("PickupID = %d", ((dwParam1-(g_libGTASA+0x70E264))/0x20) );
 		CPickupPool *pPickups = pNetGame->GetPickupPool();
 		pPickups->PickedUp( ((dwParam1-(g_libGTASA+0x70E264))/0x20) );
 	}
 }
 
-void __attribute__((naked))PickupPickUp_hook()
+__attribute__((naked)) void PickupPickUp_hook()
 {
 	//LOGI("PickupPickUp_hook");
 
@@ -686,14 +357,7 @@ void __attribute__((naked))PickupPickUp_hook()
 	// 
 	__asm__ volatile("push {r0-r11, lr}\n\t"
 					"mov %0, r4" : "=r" (dwParam1));
-	
-	//LOGI("dwParam1 = %d", dwParam1);
-	//LOGI("PickupID = %d", ((dwParam1-(g_libGTASA+0x70E264))/0x20) );
-	if(pNetGame && pNetGame->GetPickupPool())
-	{
-		CPickupPool *pPickups = pNetGame->GetPickupPool();
-		pPickups->PickedUp( ((dwParam1-(g_libGTASA+0x70E264))/0x20) );
-	}
+
 	__asm__ volatile("blx pickup_ololo\n\t");
 
 
@@ -707,86 +371,108 @@ void __attribute__((naked))PickupPickUp_hook()
 					"pop {pc}\n\t");
 }
 
-
-// 0x40C6B8
-void (*Initialize3D)(uintptr_t a1);
-void Initialize3D_hook(uintptr_t a1)
+extern "C" bool NotifyEnterVehicle(VEHICLE_TYPE *_pVehicle)
 {
-	LOGI("Initialize3D called");
-	ImGui_RenderWare_Init();
-
-	Initialize3D(a1);
+    //Log("NotifyEnterVehicle");
+ 
+    if(!pNetGame) return false;
+ 
+    CVehiclePool *pVehiclePool = pNetGame->GetVehiclePool();
+    CVehicle *pVehicle;
+    VEHICLEID VehicleID = pVehiclePool->FindIDFromGtaPtr(_pVehicle);
+ 
+    if(VehicleID == INVALID_VEHICLE_ID) return false;
+    if(!pVehiclePool->GetSlotState(VehicleID)) return false;
+    pVehicle = pVehiclePool->GetAt(VehicleID);
+    if(pVehicle->m_bDoorsLocked) return false;
+    if(pVehicle->m_pVehicle->entity.nModelIndex == TRAIN_PASSENGER) return false;
+ 
+    if(pVehicle->m_pVehicle->pDriver &&
+        pVehicle->m_pVehicle->pDriver->dwPedType != 0)
+        return false;
+ 
+    CLocalPlayer *pLocalPlayer = pNetGame->GetPlayerPool()->GetLocalPlayer();
+ 
+    //if(pLocalPlayer->GetPlayerPed() && pLocalPlayer->GetPlayerPed()->GetCurrentWeapon() == WEAPON_PARACHUTE)
+    //  pLocalPlayer->GetPlayerPed()->SetArmedWeapon(0);
+ 
+    pLocalPlayer->SendEnterVehicleNotification(VehicleID, false);
+ 
+    return true;
 }
 
-// 0x39A62C
-void (*DoRWStuffEndOfFrame)(bool a1);
-void DoRWStuffEndOfFrame_hook(bool a1)
+void (*CTaskComplexEnterCarAsDriver)(uint32_t thiz, uint32_t pVehicle);
+extern "C" void call_taskEnterCarAsDriver(uintptr_t a, uint32_t b)
 {
-	//LOGI("RwCameraEndUpdate called");
-	DoRWStuffEndOfFrame(a1);
+	CTaskComplexEnterCarAsDriver(a, b);
+}
+void __attribute__((naked)) CTaskComplexEnterCarAsDriver_hook(uint32_t thiz, uint32_t pVehicle)
+{
+    __asm__ volatile("push {r0-r11, lr}\n\t"
+                    "mov r2, lr\n\t"
+                    "blx get_lib\n\t"
+                    "add r0, #0x3A0000\n\t"
+                    "add r0, #0xEE00\n\t"
+                    "add r0, #0xF7\n\t"
+                    "cmp r2, r0\n\t"
+                    "bne 1f\n\t" // !=
+                    "mov r0, r1\n\t"
+                    "blx NotifyEnterVehicle\n\t" // call NotifyEnterVehicle
+                    "1:\n\t"  // call orig
+                    "pop {r0-r11, lr}\n\t"
+    				"push {r0-r11, lr}\n\t"
+    				"blx call_taskEnterCarAsDriver\n\t"
+    				"pop {r0-r11, pc}");
 }
 
-// 0x45B328
-void (*popcycle_display)();
-void popcycle_display_hook()
-{
-	ImGui_RenderWare_NewFrame();
-	if(pChatWindow)
-		pChatWindow->Draw();
-	ImGui::Render();
-
-	popcycle_display();
-}
+ void (*CTaskComplexLeaveCar)(uintptr_t** thiz, VEHICLE_TYPE *pVehicle, int iTargetDoor, int iDelayTime, bool bSensibleLeaveCar, bool bForceGetOut);
+ void CTaskComplexLeaveCar_hook(uintptr_t** thiz, VEHICLE_TYPE *pVehicle, int iTargetDoor, int iDelayTime, bool bSensibleLeaveCar, bool bForceGetOut) 
+ {
+ 	uintptr_t dwRetAddr = 0;
+ 	__asm__ volatile ("mov %0, lr" : "=r" (dwRetAddr));
+ 	dwRetAddr -= g_libGTASA;
+ 
+ 	if (dwRetAddr == 0x3AE905 || dwRetAddr == 0x3AE9CF) 
+ 	{
+ 		if (pNetGame) 
+ 		{
+ 			if (GamePool_FindPlayerPed()->pVehicle == (uint32_t)pVehicle) 
+ 			{
+ 				CVehiclePool *pVehiclePool=pNetGame->GetVehiclePool();
+ 				VEHICLEID VehicleID=pVehiclePool->FindIDFromGtaPtr((VEHICLE_TYPE *)GamePool_FindPlayerPed()->pVehicle);
+ 				CLocalPlayer *pLocalPlayer = pNetGame->GetPlayerPool()->GetLocalPlayer();
+ 				pLocalPlayer->SendExitVehicleNotification(VehicleID);
+ 			}
+ 		}
+ 	}
+ 
+ 	(*CTaskComplexLeaveCar)(thiz, pVehicle, iTargetDoor, iDelayTime, bSensibleLeaveCar, bForceGetOut);
+ }
 
 void InstallSpecialHooks()
 {
-	// NvFOpen redirect
-	SetUpHook(g_libGTASA+ADDR_NVFOPEN, (uintptr_t)NvFOpen_hook, (uintptr_t*)&NvFOpen);
-	SetUpHook(g_libGTASA+0x40C6B8, (uintptr_t)Initialize3D_hook, (uintptr_t*)&Initialize3D);
-	SetUpHook(g_libGTASA+0x45B328, (uintptr_t)popcycle_display_hook, (uintptr_t*)&popcycle_display);
-//	SetUpHook(g_libGTASA+0x1AD6B8, (uintptr_t)DoRWStuffEndOfFrame_hook, (uintptr_t*)&DoRWStuffEndOfFrame);
-	//渲染闪退
-	//SetUpHook(g_libGTASA+0x1A2B5C, RQ_Command_rqSwapBuffers_hook, (uintptr_t*)&RQ_Command_rqSwapBuffers);
+	InstallMethodHook(g_libGTASA+0x5DDC60, (uintptr_t)Init_hook);
+	SetUpHook(g_libGTASA+0x269974, (uintptr_t)MenuItem_add_hook, (uintptr_t*)&MenuItem_add);
+	SetUpHook(g_libGTASA+0x4D3864, (uintptr_t)CText_Get_hook, (uintptr_t*)&CText_Get);
+	SetUpHook(g_libGTASA+0x40C530, (uintptr_t)InitialiseRenderWare_hook, (uintptr_t*)&InitialiseRenderWare);
 }
 
-void InstallGameAndGraphicsLoopHooks()
+void InstallHooks()
 {
-	SetUpHook(g_libGTASA+ADDR_RENDER2DSTUFF, (uintptr_t)Render2dStuff_hook, (uintptr_t*)&Render2dStuff);
-
-	SetUpHook(g_libGTASA+0x39D08C, (uintptr_t)CPad__GetPedWalkLeftRight_hook, (uintptr_t*)&CPad__GetPedWalkLeftRight);
-	SetUpHook(g_libGTASA+0x39D110, (uintptr_t)CPad__GetPedWalkUpDown_hook, (uintptr_t*)&CPad__GetPedWalkUpDown);
-	//SetUpHook(g_libGTASA+0x39E7B0, (uintptr_t)CPad__DuckJustDown_hook, (uintptr_t*)&CPad__DuckJustDown);
-	//SetUpHook(g_libGTASA+0x39E9B8, (uintptr_t)CPad__JumpJustDown_hook, (uintptr_t*)&CPad__JumpJustDown);
-	SetUpHook(g_libGTASA+0x39EAA4, (uintptr_t)CPad__GetSprint_hook, (uintptr_t*)&CPad__GetSprint);
-	SetUpHook(g_libGTASA+0x39DD9C, (uintptr_t)CPad__MeleeAttackJustDown_hook, (uintptr_t*)&CPad__MeleeAttackJustDown);
-	SetUpHook(g_libGTASA+0x39C9E4, (uintptr_t)CPad__GetSteeringLeftRight_hook, (uintptr_t*)&CPad__GetSteeringLeftRight);
-	SetUpHook(g_libGTASA+0x39DB7C, (uintptr_t)CPad__GetAccelerate_hook, (uintptr_t*)&CPad__GetAccelerate);
-	SetUpHook(g_libGTASA+0x39D938, (uintptr_t)CPad__GetBrake_hook, (uintptr_t*)&CPad__GetBrake);
+	SetUpHook(g_libGTASA+0x23B3DC, (uintptr_t)NvFOpen_hook, (uintptr_t*)&NvFOpen);
+	SetUpHook(g_libGTASA+0x3D7CA8, (uintptr_t)CLoadingScreen_DisplayPCScreen_hook, (uintptr_t*)&CLoadingScreen_DisplayPCScreen);
+	SetUpHook(g_libGTASA+0x39AEF4, (uintptr_t)Render2dStuff_hook, (uintptr_t*)&Render2dStuff);
+	SetUpHook(g_libGTASA+0x39B098, (uintptr_t)Render2dStuffAfterFade_hook, (uintptr_t*)&Render2dStuffAfterFade);
+	SetUpHook(g_libGTASA+0x239D5C, (uintptr_t)TouchEvent_hook, (uintptr_t*)&TouchEvent);
+	SetUpHook(g_libGTASA+0x28E83C, (uintptr_t)CStreaming_InitImageList_hook, (uintptr_t*)&CStreaming_InitImageList);
+	SetUpHook(g_libGTASA+0x336690, (uintptr_t)CModelInfo_AddPedModel_hook, (uintptr_t*)&CModelInfo_AddPedModel);
+	SetUpHook(g_libGTASA+0x3DBA88, (uintptr_t)CRadar__GetRadarTraceColor_hook, (uintptr_t*)&CRadar__GetRadarTraceColor);
+	SetUpHook(g_libGTASA+0x3DAF84, (uintptr_t)CRadar__SetCoordBlip_hook, (uintptr_t*)&CRadar__SetCoordBlip);
+	SetUpHook(g_libGTASA+0x3DE9A8, (uintptr_t)CRadar__DrawRadarGangOverlay_hook, (uintptr_t*)&CRadar__DrawRadarGangOverlay);
 
 	SetUpHook(g_libGTASA+0x482E60, (uintptr_t)CTaskComplexEnterCarAsDriver_hook, (uintptr_t*)&CTaskComplexEnterCarAsDriver);
-		SetUpHook(g_libGTASA+0x4833CC, (uintptr_t)CTaskComplexLeaveCar_hook, (uintptr_t*)&CTaskComplexLeaveCar);
-		
-	char pickup_code[12];
-	memcpy(pickup_code, "\x01\xA1\x09\x68\x8F\x46\x8F\x46\x00\x00\x00\x00", 12);
-	*(uint32_t*)&pickup_code[8] = (uint32_t)PickupPickUp_hook;
-	WriteMemory(g_libGTASA+0x2D99F4, pickup_code, 12);
-}
+	SetUpHook(g_libGTASA+0x4833CC, (uintptr_t)CTaskComplexLeaveCar_hook, (uintptr_t*)&CTaskComplexLeaveCar);
+	CodeInject(g_libGTASA+0x2D99F4, (uintptr_t)PickupPickUp_hook, 1);
 
-void GameInstallHooks()
-{
-	InstallGameAndGraphicsLoopHooks();
-
-	SetUpHook(g_libGTASA+0x45A280, (uintptr_t)CPed__ProcessControl_hook, (uintptr_t*)&CPed__ProcessControl);
-	SetUpHook(g_libGTASA+0x3DE9A8, (uintptr_t)CRadar__DrawRadarGangOverlay_hook, (uintptr_t*)&CRadar__DrawRadarGangOverlay);
-	SetUpHook(g_libGTASA+0x3DBA88, (uintptr_t)CRadar__GetRadarTraceColor_hook, (uintptr_t*)&CRadar__GetRadarTraceColor);
-
-	InstallMethodHook(g_libGTASA+0x5CCA1C, (uintptr_t)AllVehicles_ProcessControl_Hook); // CAutomobile::ProcessControl
-	InstallMethodHook(g_libGTASA+0x5CCD74, (uintptr_t)AllVehicles_ProcessControl_Hook); // CBoat::ProcessControl
-	InstallMethodHook(g_libGTASA+0x5CCB44, (uintptr_t)AllVehicles_ProcessControl_Hook); // CBike::ProcessControl
-	InstallMethodHook(g_libGTASA+0x5CD0DC, (uintptr_t)AllVehicles_ProcessControl_Hook); // CPlane::ProcessControl
-	InstallMethodHook(g_libGTASA+0x5CCE8C, (uintptr_t)AllVehicles_ProcessControl_Hook); // CHeli::ProcessControl
-	InstallMethodHook(g_libGTASA+0x5CCC5C, (uintptr_t)AllVehicles_ProcessControl_Hook); // CBmx::ProcessControl
-	InstallMethodHook(g_libGTASA+0x5CCFB4, (uintptr_t)AllVehicles_ProcessControl_Hook); // CMonsterTruck::ProcessControl
-	InstallMethodHook(g_libGTASA+0x5CD204, (uintptr_t)AllVehicles_ProcessControl_Hook); // CQuadBike::ProcessControl
-	InstallMethodHook(g_libGTASA+0x5CD454, (uintptr_t)AllVehicles_ProcessControl_Hook); // CTrain::ProcessControl
+	HookCPad();
 }
