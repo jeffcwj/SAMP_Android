@@ -38,11 +38,13 @@ void SendChat(char* szMessage);
 void SendCommand(char *szCommand);
 //智能判断
 void SendMC(char*mc);
+
 	void RequestModel(int iModelID, int iLoadingStream = 2);
 	void LoadRequestedModels();
 	uint8_t IsModelLoaded(int iModelID);
 	void RemoveModel(int iModelID);
 	void SetWorldTime(int iHour, int iMinute);
+	void	GetWorldTime(int* iHour, int* iMinute);
 	void ToggleThePassingOfTime(bool bOnOff);
 	void SetWorldWeather(int iWeatherID);
 	void DisplayHUD(bool bDisp);

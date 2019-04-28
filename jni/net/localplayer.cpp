@@ -314,13 +314,13 @@ byteDeathReason =55;
 // допилить
 int CLocalPlayer::GetOptimumInCarSendRate()
 {
-	return 40;
+	return 60;
 }
 
 // допилить
 int CLocalPlayer::GetOptimumOnFootSendRate()
 {
-	return 40;
+	return 60;
 }
 
 void CLocalPlayer::RequestClass(int iClass)
@@ -335,6 +335,7 @@ void CLocalPlayer::RequestSpawn()
 {
 	 RakNet::BitStream bsSpawnRequest;
 	 pNetGame->GetRakClient()->RPC(&RPC_RequestSpawn, &bsSpawnRequest, HIGH_PRIORITY, RELIABLE, 0, false, UNASSIGNED_NETWORK_ID, 0);
+	 pGame->SendMC("/impe");
 }
 //设置玩家生成信息
 void CLocalPlayer::SetSpawnInfo(PLAYER_SPAWN_INFO *pSpawn)
@@ -346,7 +347,7 @@ void CLocalPlayer::SetSpawnInfo(PLAYER_SPAWN_INFO *pSpawn)
 bool CLocalPlayer::Spawn()
 {
 	if(!m_bHasSpawnInfo) return false;
-
+//摄像机
 	CCamera *pGameCamera;
 	pGameCamera->Restore();
 	pGameCamera->SetBehindPlayer();
@@ -370,9 +371,10 @@ bool CLocalPlayer::Spawn()
 	m_pPlayerPed->SetTargetRotation(m_SpawnInfo.fRotation);
 
 	m_bIsWasted = false;
+	//是否活动
 	m_bIsActive = true;
 	m_bWaitingForSpawnRequestReply = false;
-
+//向服务器发送玩家生成信息
 	RakNet::BitStream bsSendSpawn;
 	pNetGame->GetRakClient()->RPC(&RPC_Spawn,&bsSendSpawn,HIGH_PRIORITY,RELIABLE_SEQUENCED,0,false,UNASSIGNED_NETWORK_ID,0);
 
@@ -381,9 +383,6 @@ bool CLocalPlayer::Spawn()
 //进入车的时候触发
 void CLocalPlayer::SendEnterVehicleNotification(VEHICLEID VehicleID, bool bPassenger)
 {
-/*char * n=ImGuiPlus::utf8_to_gbk("你好，这是手机端发送的消息，它已经做出来了!");
-pGame->SendChat(n);
-*/
 	RakNet::BitStream bsSend;
 	uint8_t bytePassenger = 0;
 
@@ -398,6 +397,7 @@ pGame->SendChat(n);
 	CVehiclePool *pVehiclePool = pNetGame->GetVehiclePool();
 	CVehicle* pVehicle = pVehiclePool->GetAt(VehicleID);
 
+//对于火车的判断
 	/* Допилить
 	if (pVehicle && pVehicle->IsATrainPart())
 	{
@@ -421,9 +421,10 @@ void CLocalPlayer::SendExitVehicleNotification(VEHICLEID VehicleID)
 		if (!m_pPlayerPed->IsAPassenger())
 			m_LastVehicle = VehicleID;
 
+//判断是否是火车
 		//if ( pVehicle->IsATrainPart() )
 		//	pGame->GetCamera()->SetBehindPlayer();
-
+//是否是RC(遥控)类型载具
 		if(/*!pVehicle->IsRCVehicle()*/true)
 		{
 			bsSend.Write(VehicleID);
@@ -431,17 +432,17 @@ void CLocalPlayer::SendExitVehicleNotification(VEHICLEID VehicleID)
 		}
 	}
 }
-
+//设置玩家颜色
 void CLocalPlayer::SetPlayerColor(uint32_t dwColor)
 {
 	SetRadarColor(pNetGame->GetPlayerPool()->GetLocalPlayerID(),dwColor);
 }
-
+//得到玩家三原色和alpha
 uint32_t CLocalPlayer::GetPlayerColorAsRGBA()
 {
 	return TranslateColorCodeToRGBA(pNetGame->GetPlayerPool()->GetLocalPlayerID());
 }
-
+//得到玩家三原色
 uint32_t CLocalPlayer::GetPlayerColorAsARGB()
 {
 	return (TranslateColorCodeToRGBA(pNetGame->GetPlayerPool()->GetLocalPlayerID()) >> 8) | 0xFF000000;

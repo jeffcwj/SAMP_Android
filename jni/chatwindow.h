@@ -31,7 +31,7 @@ public:
 	void AddToChatWindowBuffer(eChatMessageType eType, char* szString, char* szNick, uint32_t uTextColor, uint32_t uNickColor);
 //这个就是不需要GBK的缓存区
 	void AddToChatWindowBufferNoGBK(eChatMessageType eType, char* szString, char* szNick, uint32_t uTextColor, uint32_t uNickColor);
-//没错，这就是那个不需要GBK的调试输出
+//不需要GBK的调试输出
 	void AddDebugMessageNoGBK(char *szFormat, ...);
 
 	void Draw();

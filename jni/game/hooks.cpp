@@ -2,11 +2,6 @@
 #include "util.h"
 #include "keystuff.h"
 #include <iostream>
-
-// OpenGL stuff
-#include <GLES2/gl2.h>
-#include <GLES2/gl2ext.h>
-
 // imgui
 #include "imgui.h"
 #include "gui/renderware_imgui.h"
@@ -248,7 +243,8 @@ uint32_t CPed__ProcessControl_hook(uintptr_t thiz)
 	A = 0xFF80
 	D = 0x80
 */
-
+//GiveWeapon武器
+//g_libGTASA+0x43429D
 uint16_t (*CPad__GetPedWalkLeftRight)(uintptr_t thiz);
 uint16_t CPad__GetPedWalkLeftRight_hook(uintptr_t thiz)
 {
@@ -419,7 +415,6 @@ uint32_t  AllVehicles_ProcessControl_Hook(uint32_t thiz)
 			//LOGI("vtbl CTrain");
 			break;
 	}
-
 	void (*CAEVehicleAudioEntity_Service)(uintptr_t CAEVehicleAudioEntity);
     *(void **)(&CAEVehicleAudioEntity_Service) = (void*)(g_libGTASA+0x364B64+1);
 
@@ -444,7 +439,6 @@ uint32_t  AllVehicles_ProcessControl_Hook(uint32_t thiz)
 	else
 	{
 		// LOCAL PLAYER
-
 		// radio/engine
 		(*CAEVehicleAudioEntity_Service)(thiz+0x138);
 	}
@@ -470,7 +464,7 @@ uint32_t CRadar__DrawRadarGangOverlay_hook(uint8_t v1)
 viewport: 0, 0, 1280, 720
 
 */
-
+/*
 static const GLfloat globVertexBufferData[] = {
 	0.0f,  0.5f, 0.0f,
    -0.5f, -0.5f, 0.0f,
@@ -491,14 +485,14 @@ const char* fragmentShaderCode =
 	"void main(){\n"
 	"gl_FragColor = vColor;\n"
 	"}";
-	
+	/
 int LoadShader(int type, const char* shaderCode)
 {
 	int shader = glCreateShader(type);
 	glShaderSource(shader, 1, &shaderCode, 0);
 	glCompileShader(shader);
 	return shader;
-}
+}*/
 
 bool ogl_bInit = false;
 uint32_t (*RQ_Command_rqSwapBuffers)(uint32_t r0);
@@ -739,7 +733,6 @@ void popcycle_display_hook()
 	ImGui_RenderWare_NewFrame();
 	if(pChatWindow)
 		pChatWindow->Draw();
-
 	ImGui::Render();
 
 	popcycle_display();
@@ -751,8 +744,8 @@ void InstallSpecialHooks()
 	SetUpHook(g_libGTASA+ADDR_NVFOPEN, (uintptr_t)NvFOpen_hook, (uintptr_t*)&NvFOpen);
 	SetUpHook(g_libGTASA+0x40C6B8, (uintptr_t)Initialize3D_hook, (uintptr_t*)&Initialize3D);
 	SetUpHook(g_libGTASA+0x45B328, (uintptr_t)popcycle_display_hook, (uintptr_t*)&popcycle_display);
-	//SetUpHook(g_libGTASA+0x1AD6B8, (uintptr_t)DoRWStuffEndOfFrame_hook, (uintptr_t*)&DoRWStuffEndOfFrame);
-	//
+//	SetUpHook(g_libGTASA+0x1AD6B8, (uintptr_t)DoRWStuffEndOfFrame_hook, (uintptr_t*)&DoRWStuffEndOfFrame);
+	//渲染闪退
 	//SetUpHook(g_libGTASA+0x1A2B5C, RQ_Command_rqSwapBuffers_hook, (uintptr_t*)&RQ_Command_rqSwapBuffers);
 }
 
@@ -771,8 +764,8 @@ void InstallGameAndGraphicsLoopHooks()
 	SetUpHook(g_libGTASA+0x39D938, (uintptr_t)CPad__GetBrake_hook, (uintptr_t*)&CPad__GetBrake);
 
 	SetUpHook(g_libGTASA+0x482E60, (uintptr_t)CTaskComplexEnterCarAsDriver_hook, (uintptr_t*)&CTaskComplexEnterCarAsDriver);
-	SetUpHook(g_libGTASA+0x4833CC, (uintptr_t)CTaskComplexLeaveCar_hook, (uintptr_t*)&CTaskComplexLeaveCar);
-
+		SetUpHook(g_libGTASA+0x4833CC, (uintptr_t)CTaskComplexLeaveCar_hook, (uintptr_t*)&CTaskComplexLeaveCar);
+		
 	char pickup_code[12];
 	memcpy(pickup_code, "\x01\xA1\x09\x68\x8F\x46\x8F\x46\x00\x00\x00\x00", 12);
 	*(uint32_t*)&pickup_code[8] = (uint32_t)PickupPickUp_hook;

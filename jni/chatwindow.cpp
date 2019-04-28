@@ -22,7 +22,7 @@ CChatWindow::~CChatWindow(){}
 void CChatWindow::Draw()
 {
 	// 1920x1080
-	ImGui::Begin("Chat Window", (bool*)true,  ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove|ImGuiWindowFlags_NoResize);
+	ImGui::Begin("Chat Window", (bool*)true,ImVec2(0,0),0/*透明度*/,ImGuiWindowFlags_NoScrollbar/*隐藏滑动条*/|ImGuiWindowFlags_NoTitleBar/*隐藏标题栏*/ | ImGuiWindowFlags_NoMove/*不可移动*/|ImGuiWindowFlags_NoResize/*不可调整大小*/);
 	//位置
 	ImGui::SetWindowPos(ImVec2(CHAT_POS_X*RsGlobal->maximumWidth, CHAT_POS_Y*RsGlobal->maximumHeight));
 //大小
@@ -56,18 +56,6 @@ void CChatWindow::Draw()
 
 	ImGui::SetScrollHere();
 	ImGui::End();
-	//聊天编辑框
-/*		ImGui::Begin("消息发送", (bool*)true, ImGuiWindowFlags_NoResize);
-			//位置
-	ImGui::SetWindowPos(ImVec2(CHAT_POS_X*RsGlobal->maximumWidth, CHAT_POS_Y*RsGlobal->maximumHeight+290));
-		ImGui::SetWindowSize(ImVec2(CHAT_SIZE_X*RsGlobal->maximumWidth, CHAT_SIZE_Y*RsGlobal->maximumHeight-180));
-	static char in[25] = {};
-ImGui::InputText(" ",in,sizeof(in));
-	ImGui::SetScrollHere();
-if(ImGui::Button("发送")){
-AddDebugMessage("Test");
-}
-ImGui::End();*/
 }
 
 void CChatWindow::AddChatMessage(char *szNick, uint32_t dwNickColor, char *szMessage)
@@ -192,7 +180,7 @@ void CChatWindow::AddToChatWindowBufferNoGBK(eChatMessageType eType, char* szStr
 	}
 	else
 		ChatWindowEntry.szNick[0] = '\0';
-ImGuiPlus::mo_ren(ChatWindowEntry.szMessageUtf8, szString);
+ImGuiPlus::def_lang(ChatWindowEntry.szMessageUtf8, szString);
 
 	if(m_ChatWindowEntriesList.size() > MAX_MESSAGES)
 		m_ChatWindowEntriesList.pop_front();
