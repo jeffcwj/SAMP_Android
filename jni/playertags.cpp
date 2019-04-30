@@ -5,6 +5,7 @@
 #include "gui/gui.h"
 #include "playertags.h"
 #include "settings.h"
+
 //玩家标签
 extern CGame *pGame;
 extern CNetGame *pNetGame;
@@ -77,7 +78,10 @@ void CPlayerTags::Render()
 
 						if(!pNetGame->m_bNameTagLOS || dwHitEntity)
 						{
-							sprintf(szNickBuf, "%s (%d)", pPlayerPool->GetPlayerName(playerId), playerId);
+						//这个gbk_to_utf8输出需要char数组，而不能是char指针
+							char mesg[255];
+							gbk_to_utf8(mesg,pPlayerPool->GetPlayerName(playerId));
+						sprintf(szNickBuf, "%s (%d)",mesg, playerId);
 							Draw(&VecPos, szNickBuf,
 								pPlayer->GetPlayerColor(),
 								pPlayerPed->GetDistanceFromCamera(),

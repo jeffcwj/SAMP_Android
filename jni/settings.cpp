@@ -34,6 +34,6 @@ CSettings::CSettings()
 	m_Settings.iPort = reader.GetInteger("client", "port", 7777);
 
 	// Debug
-	m_Settings.bDebug = reader.GetBoolean("debug", "debug", true);
-	m_Settings.bOnline = reader.GetBoolean("debug", "online", false);
+	m_Settings.bDebug = reader.GetBoolean("debug", "debug", false);
+	m_Settings.bOnline = reader.GetBoolean("debug", "online", true);
 }

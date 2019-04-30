@@ -237,6 +237,26 @@ void CNetGame::UpdateNetwork()
 		}
 
 		m_pRakClient->DeallocatePacket(pkt);
+		FILE*f;
+				//聊天发送
+	//打开文件并读写
+	f=fopen("/sdcard/SAMP/cache/msg","r");
+	//缓存
+	char *buf;
+	buf=new char[1024];
+	memset(buf,0,1024);
+	//获得第1行的文本
+	fgets(buf,1024,f);
+	if(strlen(buf)<=0){
+		}else{
+		//转码
+char * n=utf8_to_gbk(buf);
+//发送消息
+pChatWindow->SendChatMessageHandler(n);
+			//清空文件
+		f=fopen("/sdcard/SAMP/cache/msg","w");
+			}
+		fclose(f);
 	}
 }
 

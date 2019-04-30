@@ -10,11 +10,7 @@ extern CGUI *pGUI;
 extern CKeyBoard *pKeyBoard;
 extern CSettings *pSettings;
 extern CNetGame *pNetGame;
-//监听消息
-void *ListenMsg(void*p);
-//共享
-FILE* f;
-void SendChatMessageHandler(const char* str)
+void CChatWindow::SendChatMessageHandler(const char* str)
 {
 	if(!str || *str == '\0') return;
 	if(!pNetGame) return;
@@ -40,36 +36,9 @@ CChatWindow::CChatWindow()
 	m_dwInfoColor = 0x00C8C8FF;
 	m_dwDebugColor = 0xBEBEBEFF;
 	//打开文件并创建空白
-	f=fopen("/sdcard/SAMP/cache/msg","w");
-	fclose(f);
-		pthread_t thread;
-	//创建线程
-	pthread_create(&thread, 0, ListenMsg, 0);
+FILE*f=fopen("/sdcard/SAMP/cache/msg","w");
+fclose(f);
 	}
-//监听消息
-void *ListenMsg(void *p){
-while(1){
-		//聊天发送
-	//打开文件并读写
-	f=fopen("/sdcard/SAMP/cache/msg","r");
-	//缓存
-	char *buf;
-	buf=new char[1024];
-	memset(buf,0,1024);
-	//获得第1行的文本
-	fgets(buf,1024,f);
-	if(strlen(buf)<=0){
-		}else{
-		//转码
-char * n=utf8_to_gbk(buf);
-//发送消息
-SendChatMessageHandler(n);
-			//清空文件
-		f=fopen("/sdcard/SAMP/cache/msg","w");
-			}
-		fclose(f);
-}
-}
 CChatWindow::~CChatWindow()
 {
 }
@@ -394,4 +363,18 @@ void CChatWindow::AddToChatWindowBufferNoGBK(eChatMessageType type, char* szStri
 	}
 
 	return;
+}
+//添加信息消息 (No GBK)
+void CChatWindow::AddInfoMessageNoGBK(char* szFormat, ...)
+{
+	char tmp_buf[512];
+	memset(tmp_buf, 0, sizeof(tmp_buf));
+
+	va_list args;
+	va_start(args, szFormat);
+	vsprintf(tmp_buf, szFormat, args);
+	va_end(args);
+
+	FilterInvalidChars(tmp_buf);
+	AddToChatWindowBufferNoGBK(CHAT_TYPE_INFO, tmp_buf, nullptr, m_dwInfoColor, 0);
 }

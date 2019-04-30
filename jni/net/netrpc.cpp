@@ -571,7 +571,7 @@ void DialogBox(RPCParameters *rpcParams)
 void GameModeRestart(RPCParameters *rpcParams)
 {
 	Log("RPC: GameModeRestart");
-	pChatWindow->AddInfoMessage("The server is restarting..");
+	pChatWindow->AddInfoMessageNoGBK("服务器正在重启...");
 	pNetGame->ShutDownForGameRestart();
 }
 
@@ -592,21 +592,21 @@ void ConnectionRejected(RPCParameters *rpcParams)
 	bsData.Read(byteRejectReason);
 
 	if(byteRejectReason == REJECT_REASON_BAD_VERSION)
-		pChatWindow->AddInfoMessage("CONNECTION REJECTED: Incorrect Version.");
-	else if(byteRejectReason == REJECT_REASON_BAD_NICKNAME)
+		pChatWindow->AddInfoMessageNoGBK("连接被拒绝:版本错误(不对应的版本)!");
+	/*else if(byteRejectReason == REJECT_REASON_BAD_NICKNAME)
 	{
-		pChatWindow->AddInfoMessage("CONNECTION REJECTED: Unacceptable NickName");
-		pChatWindow->AddInfoMessage("Please choose another nick between and 3-20 characters");
-		pChatWindow->AddInfoMessage("Please use only a-z, A-Z, 0-9");
-		pChatWindow->AddInfoMessage("Use /quit to exit or press ESC and select Quit Game");
-	}
+		pChatWindow->AddInfoMessageNoGBK("连接被拒绝:不支持的昵称!");
+		pChatWindow->AddInfoMessageNoGBK("请选择3到20个字符之间的昵称");
+		pChatWindow->AddInfoMessageNoGBK("请使用 a-z, A-Z, 0-9中的字符作为昵称");
+		pChatWindow->AddInfoMessageNoGBK("输入/quit或按ESC选择并退出游戏.");
+	}*/
 	else if(byteRejectReason == REJECT_REASON_BAD_MOD)
 	{
-		pChatWindow->AddInfoMessage("CONNECTION REJECTED: Bad mod version.");
+		pChatWindow->AddInfoMessageNoGBK("连接被拒绝:无效的mod版本");
 	}
 	else if(byteRejectReason == REJECT_REASON_BAD_PLAYERID)
 	{
-		pChatWindow->AddInfoMessage("CONNECTION REJECTED: Unable to allocate a player slot.");
+		pChatWindow->AddInfoMessageNoGBK("连接被拒绝:无法分配玩家位.");
 	}
 
 	pNetGame->GetRakClient()->Disconnect(500);

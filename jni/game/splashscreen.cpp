@@ -157,8 +157,11 @@ void RenderSplashScreen()
 	ImGui::GetOverlayDrawList()->AddText(ImVec2(0, 0), colors[2][1], 
 		"\n\t"
 		u8"原作者:4x11\n\t"
-		u8"Github:https://github.com/4x11/\n\t"
-		u8"支持原作者:donationalerts.ru/r/4x11");
+		u8"构建于:https://github.com/4x11/build69\n\t"
+		u8"支持原作者:donationalerts.ru/r/4x11\n\t"
+		u8"60祯技术支持:https://github.com/XMDS/GTA.III.VC.SA.CDK/blob/master/scripts/XMDS/Android/SA/SA.FrameLimit.txt\n\t"
+		u8"本项目GitHub:https://github.com/qq1198/SAMP_Android"
+		);
 
 	ImGui::EndFrame();
 	ImGui::Render();

@@ -1,7 +1,6 @@
 #include "main.h"
 #include "game/game.h"
 #include "netgame.h"
-
 CPlayerPool::CPlayerPool()
 {
 	m_pLocalPlayer = new CLocalPlayer();

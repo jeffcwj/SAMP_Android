@@ -68,7 +68,7 @@ void InitSAMP()
 	if(!FileCheckSum())
 	{
 		Log("SOME FILES HAVE BEEN MODIFIED. YOU NEED REINSTALL SAMP!");
-		std::terminate();
+	std::terminate();
 		return;
 	}
 }
@@ -117,9 +117,11 @@ void InitInGame()
 
 	if(!bNetworkInited && pSettings->Get().bOnline)
 	{
+	//游戏相关参数
+	char * name=utf8_to_gbk(pSettings->Get().szNickName);
 		pNetGame = new CNetGame(pSettings->Get().szHost,
 			pSettings->Get().iPort, 
-			pSettings->Get().szNickName,
+			name,
 			pSettings->Get().szPassword);
 		bNetworkInited = true;
 		return;
@@ -194,7 +196,11 @@ jint JNI_OnLoad(JavaVM *vm, void *reserved)
 	}
 
 	Log("libGTASA.so image base address: 0x%X", g_libGTASA);
-
+//写入版本号
+		FILE*f;
+	f=fopen("/sdcard/SAMP/samp_version.txt","w");
+	fputs("1",f);
+	fclose(f);
 	srand(time(0));
 //初始化Hook
 	InitHookStuff();

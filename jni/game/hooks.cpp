@@ -132,7 +132,7 @@ uint16_t* CText_Get_hook(uintptr_t thiz, const char* text)
 	if(text[0] == 'S' && text[1] == 'A' && text[2] == 'M' && text[3] == 'P')
 	{
 		const char* code = &text[5];
-		if(!strcmp(code, "MP")) CFont::AsciiToGxtChar("MultiPlayer", gxt_string);
+		if(!strcmp(code, "MP")) CFont::AsciiToGxtChar("~r~Multi~y~Player", gxt_string);
 
     	return gxt_string;
 	}

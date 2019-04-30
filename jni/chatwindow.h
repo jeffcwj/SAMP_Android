@@ -35,6 +35,9 @@ public:
 	void AddToChatWindowBufferNoGBK(eChatMessageType eType, char* szString, char* szNick, uint32_t uTextColor, uint32_t uNickColor);
 //无GBK的调试输出
 	void AddDebugMessageNoGBK(char *szFormat, ...);
+	//无GBK的信息输出
+	void AddInfoMessageNoGBK(char *szFormat, ...);
+	void SendChatMessageHandler(const char* str);
 protected:
 	void Render();
 	bool OnTouchEvent(int type, bool multi, int x, int y);
